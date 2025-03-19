@@ -1,0 +1,35 @@
+# Server configuration
+server:
+  port: 8080
+  readTimeout: 15s
+  writeTimeout: 15s
+  shutdownTimeout: 5s
+
+# Database configuration
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  dbname: hns
+  sslmode: disable
+  poolSize: 10
+  runMigrations: true  # Set to false in production if you want to run migrations manually
+
+# Authentication configuration
+auth:
+  jwtSecret: CHANGE_THIS_TO_A_SECURE_SECRET_KEY
+  jwtExpiration: 24h
+  apiKeyExpiration: 720h  # 30 days
+
+# DNS configuration
+dns:
+  servers:
+    - 8.8.8.8
+    - 8.8.4.4
+  timeout: 5s
+
+# Logging configuration
+logging:
+  level: info
+  format: json
