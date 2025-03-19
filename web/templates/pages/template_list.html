@@ -1,0 +1,112 @@
+{{ define "content" }}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Hostname Templates</h5>
+                {{ if .IsAdmin }}
+                <a href="/templates/new" class="btn btn-primary">
+                    <i class="fas fa-plus-circle"></i> New Template
+                </a>
+                {{ end }}
+            </div>
+            <div class="card-body">
+                {{ if .Templates }}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Description</th>
+                                <th>Max Length</th>
+                                <th>Sequence Start</th>
+                                <th>Groups</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{ range .Templates }}
+                            <tr>
+                                <td><a href="/templates/{{ .ID }}">{{ .Name }}</a></td>
+                                <td>{{ .Description }}</td>
+                                <td>{{ .MaxLength }}</td>
+                                <td>{{ .SequenceStart }}</td>
+                                <td>{{ len .Groups }}</td>
+                                <td>
+                                    {{ if .IsActive }}
+                                    <span class="badge bg-success">Active</span>
+                                    {{ else }}
+                                    <span class="badge bg-danger">Inactive</span>
+                                    {{ end }}
+                                </td>
+                                <td>
+                                    <a href="/templates/{{ .ID }}" class="btn btn-sm btn-info">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                    {{ if $.IsAdmin }}
+                                    <a href="/templates/{{ .ID }}/edit" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </a>
+                                    {{ end }}
+                                    <a href="/hostnames/generate?template_id={{ .ID }}" class="btn btn-sm btn-success">
+                                        <i class="fas fa-magic"></i> Generate
+                                    </a>
+                                </td>
+                            </tr>
+                            {{ end }}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <nav aria-label="Template pagination">
+                    <ul class="pagination justify-content-center">
+                        {{ if gt .Offset 0 }}
+                        <li class="page-item">
+                            <a class="page-link" href="/templates?offset={{ .Offset | minus .Limit }}&limit={{ .Limit }}">
+                                <i class="fas fa-chevron-left"></i> Previous
+                            </a>
+                        </li>
+                        {{ else }}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="fas fa-chevron-left"></i> Previous</span>
+                        </li>
+                        {{ end }}
+                        
+                        {{ range .Pages }}
+                        <li class="page-item {{ if eq . $.CurrentPage }}active{{ end }}">
+                            <a class="page-link" href="/templates?offset={{ . | minus 1 | multiply $.Limit }}&limit={{ $.Limit }}">
+                                {{ . }}
+                            </a>
+                        </li>
+                        {{ end }}
+                        
+                        {{ if lt .NextOffset .Total }}
+                        <li class="page-item">
+                            <a class="page-link" href="/templates?offset={{ .NextOffset }}&limit={{ .Limit }}">
+                                Next <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                        {{ else }}
+                        <li class="page-item disabled">
+                            <span class="page-link">Next <i class="fas fa-chevron-right"></i></span>
+                        </li>
+                        {{ end }}
+                    </ul>
+                </nav>
+                
+                {{ else }}
+                <div class="text-center py-5">
+                    <i class="fas fa-pencil-ruler fa-3x mb-3 text-muted"></i>
+                    <p class="lead">No templates found</p>
+                    {{ if .IsAdmin }}
+                    <a href="/templates/new" class="btn btn-primary mt-3">Create Template</a>
+                    {{ end }}
+                </div>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}

@@ -1,0 +1,333 @@
+{{ define "content" }}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Reserve Hostname</h5>
+            </div>
+            <div class="card-body">
+                <form id="hostname-reservation-form">
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="template_id" class="form-label form-required">Select Template</label>
+                            <select class="form-select" id="template_id" name="template_id" required>
+                                <option value="">Select a template</option>
+                                {{ range .Templates }}
+                                <option value="{{ .ID }}">{{ .Name }} - {{ .Description }}</option>
+                                {{ end }}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="template-params-container">
+                        <!-- Template parameters will be dynamically loaded here -->
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="check_dns" name="check_dns" checked>
+                        <label class="form-check-label" for="check_dns">
+                            Check DNS availability before reservation
+                        </label>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-bookmark"></i> Reserve Hostname
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-12">
+        <div id="reservation-result">
+            <!-- Reservation results will be displayed here -->
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Template select change event
+    const templateSelect = document.getElementById('template_id');
+    if (templateSelect) {
+        templateSelect.addEventListener('change', function() {
+            const templateId = this.value;
+            
+            if (templateId) {
+                // Show loading indicator
+                document.getElementById('template-params-container').innerHTML = '<div class="loader"></div>';
+                
+                // Fetch template details
+                fetch(`/api/templates/${templateId}`, {
+                    headers: {
+                        'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('template-params-container').innerHTML = `
+                            <div class="alert alert-danger">${data.error}</div>
+                        `;
+                    } else {
+                        let paramsHtml = '';
+                        
+                        // Generate form fields for each group
+                        data.groups.forEach(group => {
+                            // Skip sequence groups
+                            if (group.validation_type === 'sequence') {
+                                return;
+                            }
+                            
+                            let inputType = 'text';
+                            let inputHtml = '';
+                            
+                            if (group.validation_type === 'list') {
+                                // Create select dropdown for list type
+                                const options = group.validation_value.split(',').map(value => {
+                                    value = value.trim();
+                                    return `<option value="${value}">${value}</option>`;
+                                }).join('');
+                                
+                                inputHtml = `
+                                    <select class="form-select template-param" id="param_${group.name}" name="param_${group.name}" ${group.is_required ? 'required' : ''}>
+                                        <option value="">Select ${group.name}</option>
+                                        ${options}
+                                    </select>
+                                `;
+                            } else if (group.validation_type === 'fixed') {
+                                // Fixed value is readonly
+                                inputHtml = `
+                                    <input type="text" class="form-control template-param" id="param_${group.name}" 
+                                        name="param_${group.name}" value="${group.validation_value}" readonly>
+                                `;
+                            } else {
+                                // Create text input for other types
+                                inputHtml = `
+                                    <input type="${inputType}" class="form-control template-param" id="param_${group.name}" 
+                                        name="param_${group.name}" maxlength="${group.length}" ${group.is_required ? 'required' : ''}>
+                                `;
+                            }
+                            
+                            paramsHtml += `
+                                <div class="mb-3">
+                                    <label for="param_${group.name}" class="form-label ${group.is_required ? 'form-required' : ''}">
+                                        ${group.name.charAt(0).toUpperCase() + group.name.slice(1)} (${group.length} chars)
+                                    </label>
+                                    ${inputHtml}
+                                </div>
+                            `;
+                        });
+                        
+                        document.getElementById('template-params-container').innerHTML = paramsHtml;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('template-params-container').innerHTML = `
+                        <div class="alert alert-danger">
+                            Failed to fetch template details. Please try again.
+                        </div>
+                    `;
+                });
+            } else {
+                // Clear params if no template is selected
+                document.getElementById('template-params-container').innerHTML = '';
+            }
+        });
+    }
+    
+    // Handle hostname reservation form
+    const reservationForm = document.getElementById('hostname-reservation-form');
+    if (reservationForm) {
+        reservationForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const jsonData = {
+                template_id: parseInt(formData.get('template_id')),
+                params: {}
+            };
+            
+            // Get template parameters
+            document.querySelectorAll('.template-param').forEach(param => {
+                const paramName = param.getAttribute('name').replace('param_', '');
+                jsonData.params[paramName] = param.value;
+            });
+            
+            // Show loading indicator
+            document.getElementById('reservation-result').innerHTML = '<div class="loader"></div>';
+            
+            // Check DNS first if the option is selected
+            const checkDns = document.getElementById('check_dns').checked;
+            
+            // First, generate the hostname to preview
+            fetch('/api/hostnames/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                },
+                body: JSON.stringify(jsonData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('reservation-result').innerHTML = `
+                        <div class="alert alert-danger">${data.error}</div>
+                    `;
+                    return;
+                }
+                
+                // Store hostname and sequence for later use
+                const hostname = data.hostname;
+                const sequenceNum = data.sequence_num;
+                
+                // If DNS check is enabled, check the hostname
+                if (checkDns) {
+                    return fetch(`/api/dns/check/${hostname}`, {
+                        headers: {
+                            'Authorization': 'Bearer ' + localStorage.getItem('token')
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(dnsData => {
+                        // Combine the data
+                        return {
+                            hostname: hostname,
+                            sequence_num: sequenceNum,
+                            dns_check: dnsData
+                        };
+                    });
+                } else {
+                    // Just return the data as is
+                    return data;
+                }
+            })
+            .then(data => {
+                if (!data) return; // Error already handled
+                
+                // Show the hostname and confirmation form
+                let resultHtml = '';
+                let dnsClass = '';
+                let dnsWarning = '';
+                
+                // If DNS check was performed and hostname exists
+                if (data.dns_check && data.dns_check.exists) {
+                    dnsClass = 'alert-warning';
+                    dnsWarning = `
+                        <div class="alert alert-warning mt-3">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            <strong>Warning:</strong> This hostname already exists in DNS with IP address ${data.dns_check.ip_address || 'unknown'}.
+                            Reserving it may cause conflicts.
+                        </div>
+                    `;
+                }
+                
+                resultHtml = `
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Confirm Reservation</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center mb-4 ${dnsClass}">
+                                <h3>${data.hostname}</h3>
+                                <p class="text-muted">Sequence: ${data.sequence_num}</p>
+                            </div>
+                            
+                            ${dnsWarning}
+                            
+                            <p>Are you sure you want to reserve this hostname?</p>
+                            
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-secondary" id="cancel-reservation-btn">
+                                    <i class="fas fa-times"></i> Cancel
+                                </button>
+                                <button type="button" class="btn btn-primary" id="confirm-reservation-btn" 
+                                    data-template-id="${jsonData.template_id}" 
+                                    data-hostname="${data.hostname}">
+                                    <i class="fas fa-check"></i> Confirm Reservation
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('reservation-result').innerHTML = resultHtml;
+                
+                // Add event listeners to the new buttons
+                document.getElementById('cancel-reservation-btn').addEventListener('click', function() {
+                    document.getElementById('reservation-result').innerHTML = '';
+                });
+                
+                document.getElementById('confirm-reservation-btn').addEventListener('click', function() {
+                    // Get the data from the button
+                    const templateId = this.getAttribute('data-template-id');
+                    
+                    // Disable the button and show loading state
+                    this.disabled = true;
+                    this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Reserving...';
+                    
+                    // Execute the actual reservation
+                    fetch('/api/hostnames/reserve', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + localStorage.getItem('token')
+                        },
+                        body: JSON.stringify(jsonData)
+                    })
+                    .then(response => response.json())
+                    .then(reserveData => {
+                        if (reserveData.error) {
+                            document.getElementById('reservation-result').innerHTML = `
+                                <div class="alert alert-danger">
+                                    <i class="fas fa-exclamation-circle"></i> 
+                                    Failed to reserve hostname: ${reserveData.error}
+                                </div>
+                            `;
+                        } else {
+                            // Show success message
+                            document.getElementById('reservation-result').innerHTML = `
+                                <div class="alert alert-success">
+                                    <i class="fas fa-check-circle"></i> 
+                                    Hostname <strong>${reserveData.name}</strong> has been reserved successfully!
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <a href="/hostnames" class="btn btn-primary">
+                                        <i class="fas fa-list"></i> View All Hostnames
+                                    </a>
+                                    <a href="/hostnames/${reserveData.id}" class="btn btn-info">
+                                        <i class="fas fa-eye"></i> View Hostname Details
+                                    </a>
+                                </div>
+                            `;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        document.getElementById('reservation-result').innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="fas fa-exclamation-circle"></i> 
+                                An error occurred while reserving the hostname. Please try again.
+                            </div>
+                        `;
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('reservation-result').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle"></i> 
+                        An error occurred. Please try again.
+                    </div>
+                `;
+            });
+        });
+    }
+});
+</script>
+{{ end }}
