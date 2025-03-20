@@ -19,6 +19,7 @@ type HostnameRepository interface {
 	GetNextSequenceNumber(ctx context.Context, templateID int64) (int, error)
 	Count(ctx context.Context, templateID int64, status models.HostnameStatus) (int, error)
 	List(ctx context.Context, limit, offset int, filters map[string]interface{}) ([]*models.Hostname, int, error)
+	CountByUser(ctx context.Context, username string, status models.HostnameStatus) (int, error)
 }
 
 // TemplateRepository defines the interface for template operations

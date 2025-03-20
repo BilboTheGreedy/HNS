@@ -848,6 +848,8 @@ func (h *WebHandler) NewTemplate(c *gin.Context) {
 }
 
 // CreateTemplate handles template creation form submission
+// This patch fixes the unused isActive variable in the CreateTemplate function
+
 func (h *WebHandler) CreateTemplate(c *gin.Context) {
 	// Get username
 	username, _ := c.Get("username")
@@ -945,6 +947,7 @@ func (h *WebHandler) CreateTemplate(c *gin.Context) {
 		h.renderTemplate(c, "template_form", gin.H{
 			"Title":    "Create Template",
 			"Template": req,
+			"IsActive": isActive, // Pass isActive to template to resolve unused variable
 		})
 		return
 	}
