@@ -83,7 +83,7 @@ func main() {
 		dnsChecker,
 	)
 
-	// Create web handler
+	// Create web handler and setup web routes
 	webHandler := web.NewWebHandler(
 		templateRepo,
 		hostRepo,
@@ -94,8 +94,6 @@ func main() {
 		dnsChecker,
 		seqService,
 	)
-
-	// Setup web routes
 	web.SetupWebRouter(router, webHandler)
 
 	// Create server

@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/bilbothegreedy/HNS/internal/auth"
-	"github.com/bilbothegreedy/HNS/internal/config"
 	"github.com/bilbothegreedy/HNS/internal/dns"
 	"github.com/bilbothegreedy/HNS/internal/repository"
 	"github.com/bilbothegreedy/HNS/internal/service"
@@ -11,41 +10,27 @@ import (
 
 // SetupRouter sets up the API routes
 func SetupRouter(
-	cfg *config.Config,
-	generatorService *service.GeneratorService,
-	reservationService *service.ReservationService,
-	sequenceService *service.SequenceService,
+	router *gin.Engine,
+	genService *service.GeneratorService,
+	resService *service.ReservationService,
+	seqService *service.SequenceService,
 	userRepo repository.UserRepository,
-) *gin.Engine {
-	// Create JWT manager
-	jwtManager := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiration)
-
-	// Create API key manager
-	apiKeyManager := auth.NewAPIKeyManager(userRepo, cfg.Auth.APIKeyExpiration)
-
-	// Create DNS checker
-	dnsChecker := dns.NewDNSChecker(cfg.DNS)
-
+	jwtManager *auth.JWTManager,
+	apiKeyManager *auth.APIKeyManager,
+	dnsChecker *dns.DNSChecker,
+) {
 	// Create handlers
-	apiHandler := NewAPIHandler(generatorService, reservationService, sequenceService, dnsChecker)
+	apiHandler := NewAPIHandler(genService, resService, seqService, dnsChecker)
 	authHandler := NewAuthHandler(userRepo, jwtManager, apiKeyManager)
-
-	// Create router
-	router := gin.New()
-
-	// Add middleware
-	router.Use(LoggerMiddleware())
-	router.Use(RecoveryMiddleware())
-	router.Use(CORSMiddleware())
 
 	// Public routes
 	router.GET("/health", apiHandler.HealthCheck)
 
 	// Auth routes
-	auth := router.Group("/auth")
+	authRoutes := router.Group("/auth")
 	{
-		auth.POST("/register", authHandler.RegisterUser)
-		auth.POST("/login", authHandler.Login)
+		authRoutes.POST("/register", authHandler.RegisterUser)
+		authRoutes.POST("/login", authHandler.Login)
 	}
 
 	// API routes requiring authentication
@@ -80,10 +65,10 @@ func SetupRouter(
 		}
 
 		// DNS routes
-		dns := api.Group("/dns")
+		dnsRoutes := api.Group("/dns")
 		{
-			dns.GET("/check/:hostname", apiHandler.CheckHostnameDNS)
-			dns.POST("/scan", apiHandler.ScanDNS)
+			dnsRoutes.GET("/check/:hostname", apiHandler.CheckHostnameDNS)
+			dnsRoutes.POST("/scan", apiHandler.ScanDNS)
 		}
 
 		// User routes
@@ -104,6 +89,4 @@ func SetupRouter(
 			apiKeys.DELETE("/:id", authHandler.DeleteApiKey)
 		}
 	}
-
-	return router
 }
