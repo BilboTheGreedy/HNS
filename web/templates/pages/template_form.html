@@ -1,0 +1,287 @@
+{{ define "content" }}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ if .Template.ID }}Edit{{ else }}Create{{ end }} Template</h5>
+                <a href="/templates" class="btn btn-sm btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to List
+                </a>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ if .Template.ID }}/templates/{{ .Template.ID }}{{ else }}/templates{{ end }}">
+                    {{ if .Template.ID }}
+                    <input type="hidden" name="_method" value="PUT">
+                    {{ end }}
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label form-required">Template Name</label>
+                            <input type="text" class="form-control" id="name" name="name" value="{{ .Template.Name }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="max_length" class="form-label form-required">Maximum Length</label>
+                            <input type="number" class="form-control" id="max_length" name="max_length" value="{{ if .Template.MaxLength }}{{ .Template.MaxLength }}{{ else }}15{{ end }}" min="1" max="64" required>
+                            <div class="form-text">Maximum total length of generated hostnames.</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="2">{{ .Template.Description }}</textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label for="sequence_start" class="form-label form-required">Sequence Start</label>
+                            <input type="number" class="form-control" id="sequence_start" name="sequence_start" value="{{ if .Template.SequenceStart }}{{ .Template.SequenceStart }}{{ else }}1{{ end }}" min="0" required>
+                            <div class="form-text">First number in the sequence.</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="sequence_length" class="form-label form-required">Sequence Length</label>
+                            <input type="number" class="form-control" id="sequence_length" name="sequence_length" value="{{ if .Template.SequenceLength }}{{ .Template.SequenceLength }}{{ else }}3{{ end }}" min="1" max="10" required>
+                            <div class="form-text">Number of digits in sequence.</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="sequence_increment" class="form-label form-required">Sequence Increment</label>
+                            <input type="number" class="form-control" id="sequence_increment" name="sequence_increment" value="{{ if .Template.SequenceIncrement }}{{ .Template.SequenceIncrement }}{{ else }}1{{ end }}" min="1" required>
+                            <div class="form-text">Amount to increment by.</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="sequence_padding" class="form-label">Padding</label>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="sequence_padding" name="sequence_padding" {{ if or (not .Template.ID) .Template.SequencePadding }}checked{{ end }}>
+                                <label class="form-check-label" for="sequence_padding">
+                                    Zero-pad sequence numbers
+                                </label>
+                            </div>
+                            <div class="form-text">E.g., "001" instead of "1".</div>
+                        </div>
+                    </div>
+                    
+                    <h5 class="mt-4 mb-3">Template Groups</h5>
+                    <p class="text-muted">Define the structure of your hostname template with groups. Each group represents a part of the hostname.</p>
+                    
+                    <div id="template-groups-container">
+                        {{ if .Template.Groups }}
+                        {{ range $index, $group := .Template.Groups }}
+                        <div class="template-group">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="group_name_{{ $index }}" class="form-label form-required">Group Name</label>
+                                    <input type="text" class="form-control" id="group_name_{{ $index }}" name="groups[{{ $index }}][name]" value="{{ $group.Name }}" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="group_length_{{ $index }}" class="form-label form-required">Length</label>
+                                    <input type="number" class="form-control" id="group_length_{{ $index }}" name="groups[{{ $index }}][length]" value="{{ $group.Length }}" min="1" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="group_required_{{ $index }}" class="form-label">Required</label>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="group_required_{{ $index }}" name="groups[{{ $index }}][is_required]" {{ if $group.IsRequired }}checked{{ end }}>
+                                        <label class="form-check-label" for="group_required_{{ $index }}">
+                                            Required
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="group_validation_type_{{ $index }}" class="form-label form-required">Validation Type</label>
+                                    <select class="form-select validation-type-select" id="group_validation_type_{{ $index }}" name="groups[{{ $index }}][validation_type]" required>
+                                        <option value="fixed" {{ if eq $group.ValidationType "fixed" }}selected{{ end }}>Fixed Value</option>
+                                        <option value="list" {{ if eq $group.ValidationType "list" }}selected{{ end }}>List of Values</option>
+                                        <option value="regex" {{ if eq $group.ValidationType "regex" }}selected{{ end }}>Regular Expression</option>
+                                        <option value="sequence" {{ if eq $group.ValidationType "sequence" }}selected{{ end }}>Sequence Number</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3 validation-value-container" {{ if eq $group.ValidationType "sequence" }}style="display: none;"{{ end }}>
+                                    <label for="group_validation_value_{{ $index }}" class="form-label validation-value-label form-required">
+                                        {{ if eq $group.ValidationType "fixed" }}
+                                        Fixed Value
+                                        {{ else if eq $group.ValidationType "list" }}
+                                        Allowed Values
+                                        {{ else if eq $group.ValidationType "regex" }}
+                                        Regex Pattern
+                                        {{ else }}
+                                        Value
+                                        {{ end }}
+                                    </label>
+                                    <input type="text" class="form-control" id="group_validation_value_{{ $index }}" name="groups[{{ $index }}][validation_value]" value="{{ $group.ValidationValue }}" {{ if ne $group.ValidationType "sequence" }}required{{ end }}>
+                                    <small class="validation-info text-muted">
+                                        {{ if eq $group.ValidationType "fixed" }}
+                                        Enter the exact value for this group.
+                                        {{ else if eq $group.ValidationType "list" }}
+                                        Enter comma-separated list of allowed values (e.g., US,UK,DE,FR).
+                                        {{ else if eq $group.ValidationType "regex" }}
+                                        Enter a valid regular expression pattern.
+                                        {{ end }}
+                                    </small>
+                                </div>
+                            </div>
+                            {{ if gt $index 0 }}
+                            <button type="button" class="btn btn-sm btn-outline-danger remove-group-btn">
+                                <i class="fas fa-trash"></i> Remove Group
+                            </button>
+                            {{ end }}
+                            <hr>
+                        </div>
+                        {{ end }}
+                        {{ else }}
+                        <!-- Default template with at least one group -->
+                        <div class="template-group">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="group_name_0" class="form-label form-required">Group Name</label>
+                                    <input type="text" class="form-control" id="group_name_0" name="groups[0][name]" value="location" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="group_length_0" class="form-label form-required">Length</label>
+                                    <input type="number" class="form-control" id="group_length_0" name="groups[0][length]" value="2" min="1" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="group_required_0" class="form-label">Required</label>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="group_required_0" name="groups[0][is_required]" checked>
+                                        <label class="form-check-label" for="group_required_0">
+                                            Required
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="group_validation_type_0" class="form-label form-required">Validation Type</label>
+                                    <select class="form-select validation-type-select" id="group_validation_type_0" name="groups[0][validation_type]" required>
+                                        <option value="fixed">Fixed Value</option>
+                                        <option value="list" selected>List of Values</option>
+                                        <option value="regex">Regular Expression</option>
+                                        <option value="sequence">Sequence Number</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3 validation-value-container">
+                                    <label for="group_validation_value_0" class="form-label validation-value-label form-required">Allowed Values</label>
+                                    <input type="text" class="form-control" id="group_validation_value_0" name="groups[0][validation_value]" value="US,EU,AP,AF" required>
+                                    <small class="validation-info text-muted">
+                                        Enter comma-separated list of allowed values (e.g., US,UK,DE,FR).
+                                    </small>
+                                </div>
+                            </div>
+                            <hr>
+                        </div>
+                        <div class="template-group">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="group_name_1" class="form-label form-required">Group Name</label>
+                                    <input type="text" class="form-control" id="group_name_1" name="groups[1][name]" value="type" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="group_length_1" class="form-label form-required">Length</label>
+                                    <input type="number" class="form-control" id="group_length_1" name="groups[1][length]" value="2" min="1" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="group_required_1" class="form-label">Required</label>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="group_required_1" name="groups[1][is_required]" checked>
+                                        <label class="form-check-label" for="group_required_1">
+                                            Required
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="group_validation_type_1" class="form-label form-required">Validation Type</label>
+                                    <select class="form-select validation-type-select" id="group_validation_type_1" name="groups[1][validation_type]" required>
+                                        <option value="fixed">Fixed Value</option>
+                                        <option value="list" selected>List of Values</option>
+                                        <option value="regex">Regular Expression</option>
+                                        <option value="sequence">Sequence Number</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3 validation-value-container">
+                                    <label for="group_validation_value_1" class="form-label validation-value-label form-required">Allowed Values</label>
+                                    <input type="text" class="form-control" id="group_validation_value_1" name="groups[1][validation_value]" value="WS,DB,AP" required>
+                                    <small class="validation-info text-muted">
+                                        Enter comma-separated list of allowed values (e.g., WS,DB,AP).
+                                    </small>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger remove-group-btn">
+                                <i class="fas fa-trash"></i> Remove Group
+                            </button>
+                            <hr>
+                        </div>
+                        <div class="template-group">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="group_name_2" class="form-label form-required">Group Name</label>
+                                    <input type="text" class="form-control" id="group_name_2" name="groups[2][name]" value="sequence" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="group_length_2" class="form-label form-required">Length</label>
+                                    <input type="number" class="form-control" id="group_length_2" name="groups[2][length]" value="3" min="1" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="group_required_2" class="form-label">Required</label>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="group_required_2" name="groups[2][is_required]" checked>
+                                        <label class="form-check-label" for="group_required_2">
+                                            Required
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="group_validation_type_2" class="form-label form-required">Validation Type</label>
+                                    <select class="form-select validation-type-select" id="group_validation_type_2" name="groups[2][validation_type]" required>
+                                        <option value="fixed">Fixed Value</option>
+                                        <option value="list">List of Values</option>
+                                        <option value="regex">Regular Expression</option>
+                                        <option value="sequence" selected>Sequence Number</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3 validation-value-container" style="display: none;">
+                                    <label for="group_validation_value_2" class="form-label validation-value-label">Value</label>
+                                    <input type="text" class="form-control" id="group_validation_value_2" name="groups[2][validation_value]">
+                                    <small class="validation-info text-muted">
+                                        No validation value needed for sequence type.
+                                    </small>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger remove-group-btn">
+                                <i class="fas fa-trash"></i> Remove Group
+                            </button>
+                            <hr>
+                        </div>
+                        {{ end }}
+                    </div>
+                    
+                    <div class="mb-4">
+                        <button type="button" id="add-group-btn" class="btn btn-outline-primary">
+                            <i class="fas fa-plus-circle"></i> Add Group
+                        </button>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" {{ if or (not .Template.ID) .Template.IsActive }}checked{{ end }}>
+                            <label class="form-check-label" for="is_active">
+                                Active Template
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="/templates" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> {{ if .Template.ID }}Update{{ else }}Create{{ end }} Template
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}

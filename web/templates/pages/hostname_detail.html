@@ -1,0 +1,176 @@
+{{ define "content" }}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Hostname Details</h5>
+                <div>
+                    <a href="/hostnames" class="btn btn-sm btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to List
+                    </a>
+                    
+                    {{ if eq .Hostname.Status "reserved" }}
+                    <a href="/hostnames/{{ .Hostname.ID }}/commit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-check"></i> Commit
+                    </a>
+                    {{ else if eq .Hostname.Status "committed" }}
+                    <a href="/hostnames/{{ .Hostname.ID }}/release" class="btn btn-sm btn-secondary">
+                        <i class="fas fa-undo"></i> Release
+                    </a>
+                    {{ end }}
+                    
+                    <a href="/dns/check/{{ .Hostname.Name }}" class="btn btn-sm btn-info">
+                        <i class="fas fa-network-wired"></i> Check DNS
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h3 class="text-center mb-4">{{ .Hostname.Name }}</h3>
+                        
+                        <table class="table">
+                            <tr>
+                                <th>ID:</th>
+                                <td>{{ .Hostname.ID }}</td>
+                            </tr>
+                            <tr>
+                                <th>Template:</th>
+                                <td><a href="/templates/{{ .Hostname.TemplateID }}">{{ .Template.Name }}</a></td>
+                            </tr>
+                            <tr>
+                                <th>Status:</th>
+                                <td>
+                                    {{ if eq .Hostname.Status "available" }}
+                                    <span class="badge status-available">Available</span>
+                                    {{ else if eq .Hostname.Status "reserved" }}
+                                    <span class="badge status-reserved">Reserved</span>
+                                    {{ else if eq .Hostname.Status "committed" }}
+                                    <span class="badge status-committed">Committed</span>
+                                    {{ else if eq .Hostname.Status "released" }}
+                                    <span class="badge status-released">Released</span>
+                                    {{ end }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Sequence Number:</th>
+                                <td><span class="sequence-num">{{ .Hostname.SequenceNum }}</span></td>
+                            </tr>
+                            <tr>
+                                <th>DNS Verified:</th>
+                                <td>
+                                    {{ if .Hostname.DNSVerified }}
+                                    <span class="text-success"><i class="fas fa-check-circle"></i> Yes</span>
+                                    {{ else }}
+                                    <span class="text-danger"><i class="fas fa-times-circle"></i> No</span>
+                                    {{ end }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Created At:</th>
+                                <td>{{ .Hostname.CreatedAt | formatTime }}</td>
+                            </tr>
+                            <tr>
+                                <th>Updated At:</th>
+                                <td>{{ .Hostname.UpdatedAt | formatTime }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">Reservation Details</h6>
+                            </div>
+                            <div class="card-body">
+                                <table class="table">
+                                    <tr>
+                                        <th>Reserved By:</th>
+                                        <td>{{ .Hostname.ReservedBy }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Reserved At:</th>
+                                        <td>{{ .Hostname.ReservedAt | formatTime }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        {{ if .Hostname.CommittedBy }}
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">Commit Details</h6>
+                            </div>
+                            <div class="card-body">
+                                <table class="table">
+                                    <tr>
+                                        <th>Committed By:</th>
+                                        <td>{{ .Hostname.CommittedBy }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Committed At:</th>
+                                        <td>{{ .Hostname.CommittedAt | formatTime }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        {{ end }}
+                        
+                        {{ if .Hostname.ReleasedBy }}
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">Release Details</h6>
+                            </div>
+                            <div class="card-body">
+                                <table class="table">
+                                    <tr>
+                                        <th>Released By:</th>
+                                        <td>{{ .Hostname.ReleasedBy }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Released At:</th>
+                                        <td>{{ .Hostname.ReleasedAt | formatTime }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        {{ end }}
+                        
+                        {{ if .DNSResult }}
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">DNS Verification</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="text-center mb-3">
+                                    {{ if .DNSResult.Exists }}
+                                    <i class="fas fa-exclamation-triangle fa-3x text-warning"></i>
+                                    <h5 class="mt-3">Hostname exists in DNS</h5>
+                                    {{ else }}
+                                    <i class="fas fa-check-circle fa-3x text-success"></i>
+                                    <h5 class="mt-3">Hostname does not exist in DNS</h5>
+                                    {{ end }}
+                                </div>
+                                
+                                <table class="table">
+                                    {{ if .DNSResult.Exists }}
+                                    <tr>
+                                        <th>IP Address:</th>
+                                        <td>{{ .DNSResult.IPAddress }}</td>
+                                    </tr>
+                                    {{ end }}
+                                    <tr>
+                                        <th>Verified At:</th>
+                                        <td>{{ .DNSResult.VerifiedAt | formatTime }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        {{ end }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}

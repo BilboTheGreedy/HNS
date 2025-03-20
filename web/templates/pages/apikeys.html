@@ -1,0 +1,327 @@
+{{ define "content" }}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">API Keys</h5>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createApiKeyModal">
+                    <i class="fas fa-plus-circle"></i> New API Key
+                </button>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    API keys allow external applications to access the HNS API on your behalf. Treat them like passwords and never share them in public.
+                </p>
+                
+                {{ if .ApiKeys }}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Scope</th>
+                                <th>Created</th>
+                                <th>Expires</th>
+                                <th>Last Used</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{ range .ApiKeys }}
+                            <tr>
+                                <td>{{ .Name }}</td>
+                                <td>
+                                    {{ $scopes := splitString .Scope "," }}
+                                    {{ range $scopes }}
+                                    <span class="badge bg-secondary me-1">{{ . }}</span>
+                                    {{ end }}
+                                </td>
+                                <td>{{ .CreatedAt | formatTime }}</td>
+                                <td>{{ .ExpiresAt | formatTime }}</td>
+                                <td>
+                                    {{ if .LastUsed }}
+                                    {{ .LastUsed | formatTime }}
+                                    {{ else }}
+                                    <span class="text-muted">Never</span>
+                                    {{ end }}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger delete-key-btn" data-key-id="{{ .ID }}" data-key-name="{{ .Name }}">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </td>
+                            </tr>
+                            {{ end }}
+                        </tbody>
+                    </table>
+                </div>
+                {{ else }}
+                <div class="text-center py-5">
+                    <i class="fas fa-key fa-3x mb-3 text-muted"></i>
+                    <p class="lead">No API keys found</p>
+                    <button type="button" class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#createApiKeyModal">
+                        Create API Key
+                    </button>
+                </div>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create API Key Modal -->
+<div class="modal fade" id="createApiKeyModal" tabindex="-1" aria-labelledby="createApiKeyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createApiKeyModalLabel">Create API Key</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="create-api-key-form" action="/api-keys" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="key_name" class="form-label form-required">Name</label>
+                        <input type="text" class="form-control" id="key_name" name="name" required>
+                        <div class="form-text">A descriptive name to identify this API key.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label form-required">Scope</label>
+                        <div class="form-text mb-2">Select the permissions for this API key:</div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input scope-check" type="checkbox" id="scope_read" name="scope[]" value="read" checked>
+                            <label class="form-check-label" for="scope_read">
+                                <strong>read</strong> - View templates and hostnames
+                            </label>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input scope-check" type="checkbox" id="scope_reserve" name="scope[]" value="reserve">
+                            <label class="form-check-label" for="scope_reserve">
+                                <strong>reserve</strong> - Reserve hostnames
+                            </label>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input scope-check" type="checkbox" id="scope_commit" name="scope[]" value="commit">
+                            <label class="form-check-label" for="scope_commit">
+                                <strong>commit</strong> - Commit reserved hostnames
+                            </label>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input scope-check" type="checkbox" id="scope_release" name="scope[]" value="release">
+                            <label class="form-check-label" for="scope_release">
+                                <strong>release</strong> - Release committed hostnames
+                            </label>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input scope-check" type="checkbox" id="scope_admin" name="scope[]" value="admin">
+                            <label class="form-check-label" for="scope_admin">
+                                <strong>admin</strong> - Full administrative access
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create API Key</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- New API Key Display Modal -->
+<div class="modal fade" id="newApiKeyModal" tabindex="-1" aria-labelledby="newApiKeyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="newApiKeyModalLabel">API Key Created</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> This key will only be displayed once. Please copy it now.
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">API Key</label>
+                    <div class="api-key-display p-2" id="new-api-key">
+                        <!-- API key will be inserted here -->
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Details</label>
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Name:</th>
+                            <td id="new-key-name"></td>
+                        </tr>
+                        <tr>
+                            <th>Scope:</th>
+                            <td id="new-key-scope"></td>
+                        </tr>
+                        <tr>
+                            <th>Expires:</th>
+                            <td id="new-key-expires"></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary copy-btn" data-copy-target="new-api-key">
+                    <i class="fas fa-copy"></i> Copy to Clipboard
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteApiKeyModal" tabindex="-1" aria-labelledby="deleteApiKeyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteApiKeyModalLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the API key "<span id="delete-key-name"></span>"?</p>
+                <p class="text-danger">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="delete-api-key-form" action="/api-keys/delete" method="POST">
+                    <input type="hidden" id="delete-key-id" name="id">
+                    <button type="submit" class="btn btn-danger">Delete API Key</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle API key form submission
+    const createApiKeyForm = document.getElementById('create-api-key-form');
+    if (createApiKeyForm) {
+        createApiKeyForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            // Collect scope values
+            const scopeChecks = document.querySelectorAll('.scope-check:checked');
+            const scopes = Array.from(scopeChecks).map(checkbox => checkbox.value);
+            
+            const jsonData = {
+                name: formData.get('name'),
+                scope: scopes.join(',')
+            };
+            
+            // Create the API key
+            fetch('/api/apikeys', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                },
+                body: JSON.stringify(jsonData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Failed to create API key: ' + data.error);
+                } else {
+                    // Close the create modal
+                    const createModal = bootstrap.Modal.getInstance(document.getElementById('createApiKeyModal'));
+                    createModal.hide();
+                    
+                    // Display the new API key in the modal
+                    document.getElementById('new-api-key').textContent = data.key;
+                    document.getElementById('new-key-name').textContent = data.name;
+                    
+                    // Format scopes as badges
+                    const scopeBadges = data.scope.split(',').map(scope => 
+                        `<span class="badge bg-secondary me-1">${scope.trim()}</span>`
+                    ).join('');
+                    document.getElementById('new-key-scope').innerHTML = scopeBadges;
+                    
+                    // Format expiration date
+                    const expiresDate = new Date(data.expires_at);
+                    document.getElementById('new-key-expires').textContent = expiresDate.toLocaleString();
+                    
+                    // Show the new key modal
+                    const newKeyModal = new bootstrap.Modal(document.getElementById('newApiKeyModal'));
+                    newKeyModal.show();
+                    
+                    // Reload the page when the modal is closed
+                    document.getElementById('newApiKeyModal').addEventListener('hidden.bs.modal', function() {
+                        window.location.reload();
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to create API key. Please try again.');
+            });
+        });
+    }
+    
+    // Handle delete button clicks
+    document.querySelectorAll('.delete-key-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const keyId = this.getAttribute('data-key-id');
+            const keyName = this.getAttribute('data-key-name');
+            
+            document.getElementById('delete-key-id').value = keyId;
+            document.getElementById('delete-key-name').textContent = keyName;
+            
+            const deleteModal = new bootstrap.Modal(document.getElementById('deleteApiKeyModal'));
+            deleteModal.show();
+        });
+    });
+    
+    // Handle delete form submission
+    const deleteApiKeyForm = document.getElementById('delete-api-key-form');
+    if (deleteApiKeyForm) {
+        deleteApiKeyForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const keyId = document.getElementById('delete-key-id').value;
+            
+            // Delete the API key
+            fetch(`/api/apikeys/${keyId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                }
+            })
+            .then(response => {
+                if (response.status === 204) {
+                    // Success - reload the page
+                    window.location.reload();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Failed to delete API key');
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert(error.message || 'Failed to delete API key. Please try again.');
+                
+                // Close the modal
+                const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteApiKeyModal'));
+                deleteModal.hide();
+            });
+        });
+    }
+});
+</script>
+{{ end }}

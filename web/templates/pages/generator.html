@@ -1,0 +1,49 @@
+{{ define "content" }}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Generate Hostname</h5>
+            </div>
+            <div class="card-body">
+                <form id="hostname-generator-form">
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="template_id" class="form-label form-required">Select Template</label>
+                            <select class="form-select" id="template_id" name="template_id" required>
+                                <option value="">Select a template</option>
+                                {{ range .Templates }}
+                                <option value="{{ .ID }}">{{ .Name }} - {{ .Description }}</option>
+                                {{ end }}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="template-params-container">
+                        <!-- Template parameters will be dynamically loaded here -->
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="check_dns" name="check_dns" checked>
+                        <label class="form-check-label" for="check_dns">
+                            Check DNS availability
+                        </label>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-magic"></i> Generate Hostname
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-12">
+        <div id="generator-result">
+            <!-- Generator results will be displayed here -->
+        </div>
+    </div>
+</div>
+{{ end }}

@@ -1,0 +1,450 @@
+{{ define "content" }}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">User Management</h5>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createUserModal">
+                    <i class="fas fa-user-plus"></i> New User
+                </button>
+            </div>
+            <div class="card-body">
+                {{ if .Users }}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Last Login</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{ range .Users }}
+                            <tr>
+                                <td>{{ .Username }}</td>
+                                <td>{{ .FirstName }} {{ .LastName }}</td>
+                                <td>{{ .Email }}</td>
+                                <td>
+                                    {{ if eq .Role "admin" }}
+                                    <span class="badge bg-danger">Admin</span>
+                                    {{ else }}
+                                    <span class="badge bg-primary">User</span>
+                                    {{ end }}
+                                </td>
+                                <td>
+                                    {{ if .IsActive }}
+                                    <span class="badge bg-success">Active</span>
+                                    {{ else }}
+                                    <span class="badge bg-secondary">Inactive</span>
+                                    {{ end }}
+                                </td>
+                                <td>
+                                    {{ if .LastLogin }}
+                                    {{ .LastLogin | formatTime }}
+                                    {{ else }}
+                                    <span class="text-muted">Never</span>
+                                    {{ end }}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary edit-user-btn" 
+                                        data-user-id="{{ .ID }}"
+                                        data-username="{{ .Username }}"
+                                        data-email="{{ .Email }}"
+                                        data-first-name="{{ .FirstName }}"
+                                        data-last-name="{{ .LastName }}"
+                                        data-role="{{ .Role }}"
+                                        data-is-active="{{ .IsActive }}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+                                    {{ if not (eq .Username $.CurrentUser) }}
+                                    <button class="btn btn-sm btn-danger delete-user-btn" 
+                                        data-user-id="{{ .ID }}" 
+                                        data-username="{{ .Username }}">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                    {{ end }}
+                                </td>
+                            </tr>
+                            {{ end }}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <nav aria-label="User pagination">
+                    <ul class="pagination justify-content-center">
+                        {{ if gt .Offset 0 }}
+                        <li class="page-item">
+                            <a class="page-link" href="/admin/users?offset={{ .Offset | minus .Limit }}&limit={{ .Limit }}">
+                                <i class="fas fa-chevron-left"></i> Previous
+                            </a>
+                        </li>
+                        {{ else }}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="fas fa-chevron-left"></i> Previous</span>
+                        </li>
+                        {{ end }}
+                        
+                        {{ range .Pages }}
+                        <li class="page-item {{ if eq . $.CurrentPage }}active{{ end }}">
+                            <a class="page-link" href="/admin/users?offset={{ . | minus 1 | multiply $.Limit }}&limit={{ $.Limit }}">
+                                {{ . }}
+                            </a>
+                        </li>
+                        {{ end }}
+                        
+                        {{ if lt .NextOffset .Total }}
+                        <li class="page-item">
+                            <a class="page-link" href="/admin/users?offset={{ .NextOffset }}&limit={{ .Limit }}">
+                                Next <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                        {{ else }}
+                        <li class="page-item disabled">
+                            <span class="page-link">Next <i class="fas fa-chevron-right"></i></span>
+                        </li>
+                        {{ end }}
+                    </ul>
+                </nav>
+                
+                {{ else }}
+                <div class="text-center py-5">
+                    <i class="fas fa-users fa-3x mb-3 text-muted"></i>
+                    <p class="lead">No users found</p>
+                    <button type="button" class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#createUserModal">
+                        Create User
+                    </button>
+                </div>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create User Modal -->
+<div class="modal fade" id="createUserModal" tabindex="-1" aria-labelledby="createUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createUserModalLabel">Create User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="create-user-form" action="/admin/users" method="POST">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="username" class="form-label form-required">Username</label>
+                            <input type="text" class="form-control" id="username" name="username" required minlength="3" maxlength="50">
+                            <div class="form-text">3-50 characters, alphanumeric, underscores and hyphens only.</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label form-required">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="first_name" class="form-label form-required">First Name</label>
+                            <input type="text" class="form-control" id="first_name" name="first_name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="last_name" class="form-label form-required">Last Name</label>
+                            <input type="text" class="form-control" id="last_name" name="last_name" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="password" class="form-label form-required">Password</label>
+                            <input type="password" class="form-control" id="password" name="password" required minlength="8">
+                            <div class="form-text">At least 8 characters with a mix of letters, numbers, and special characters.</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="role" class="form-label form-required">Role</label>
+                            <select class="form-select" id="role" name="role" required>
+                                <option value="user">User</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" checked>
+                            <label class="form-check-label" for="is_active">
+                                Active account
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="edit-user-form" action="/admin/users/update" method="POST">
+                <input type="hidden" id="edit_user_id" name="id">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="edit_username" readonly>
+                            <div class="form-text">Username cannot be changed.</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_email" class="form-label form-required">Email</label>
+                            <input type="email" class="form-control" id="edit_email" name="email" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_first_name" class="form-label form-required">First Name</label>
+                            <input type="text" class="form-control" id="edit_first_name" name="first_name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_last_name" class="form-label form-required">Last Name</label>
+                            <input type="text" class="form-control" id="edit_last_name" name="last_name" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_password" class="form-label">New Password</label>
+                            <input type="password" class="form-control" id="edit_password" name="password" minlength="8">
+                            <div class="form-text">Leave blank to keep current password.</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_role" class="form-label form-required">Role</label>
+                            <select class="form-select" id="edit_role" name="role" required>
+                                <option value="user">User</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="edit_is_active" name="is_active">
+                            <label class="form-check-label" for="edit_is_active">
+                                Active account
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete User Modal -->
+<div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteUserModalLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the user "<span id="delete-username"></span>"?</p>
+                <p class="text-danger">This action cannot be undone. All associated hostnames will remain in the system.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="delete-user-form" action="/admin/users/delete" method="POST">
+                    <input type="hidden" id="delete-user-id" name="id">
+                    <button type="submit" class="btn btn-danger">Delete User</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle edit user button clicks
+    document.querySelectorAll('.edit-user-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.getAttribute('data-user-id');
+            const username = this.getAttribute('data-username');
+            const email = this.getAttribute('data-email');
+            const firstName = this.getAttribute('data-first-name');
+            const lastName = this.getAttribute('data-last-name');
+            const role = this.getAttribute('data-role');
+            const isActive = this.getAttribute('data-is-active') === 'true';
+            
+            document.getElementById('edit_user_id').value = userId;
+            document.getElementById('edit_username').value = username;
+            document.getElementById('edit_email').value = email;
+            document.getElementById('edit_first_name').value = firstName;
+            document.getElementById('edit_last_name').value = lastName;
+            document.getElementById('edit_role').value = role;
+            document.getElementById('edit_is_active').checked = isActive;
+            
+            const editModal = new bootstrap.Modal(document.getElementById('editUserModal'));
+            editModal.show();
+        });
+    });
+    
+    // Handle delete user button clicks
+    document.querySelectorAll('.delete-user-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.getAttribute('data-user-id');
+            const username = this.getAttribute('data-username');
+            
+            document.getElementById('delete-user-id').value = userId;
+            document.getElementById('delete-username').textContent = username;
+            
+            const deleteModal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
+            deleteModal.show();
+        });
+    });
+    
+    // Handle create user form submission
+    const createUserForm = document.getElementById('create-user-form');
+    if (createUserForm) {
+        createUserForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const jsonData = {
+                username: formData.get('username'),
+                email: formData.get('email'),
+                password: formData.get('password'),
+                first_name: formData.get('first_name'),
+                last_name: formData.get('last_name'),
+                role: formData.get('role'),
+                is_active: formData.has('is_active')
+            };
+            
+            // Create the user
+            fetch('/api/auth/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                },
+                body: JSON.stringify(jsonData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Failed to create user: ' + data.error);
+                } else {
+                    // Close the modal and reload the page
+                    const createModal = bootstrap.Modal.getInstance(document.getElementById('createUserModal'));
+                    createModal.hide();
+                    window.location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to create user. Please try again.');
+            });
+        });
+    }
+    
+    // Handle edit user form submission
+    const editUserForm = document.getElementById('edit-user-form');
+    if (editUserForm) {
+        editUserForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const userId = formData.get('id');
+            
+            const jsonData = {
+                email: formData.get('email'),
+                first_name: formData.get('first_name'),
+                last_name: formData.get('last_name'),
+                role: formData.get('role'),
+                is_active: formData.has('is_active')
+            };
+            
+            // Add password only if it's not empty
+            const password = formData.get('password');
+            if (password) {
+                jsonData.password = password;
+            }
+            
+            // Update the user
+            fetch(`/api/users/${userId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                },
+                body: JSON.stringify(jsonData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Failed to update user: ' + data.error);
+                } else {
+                    // Close the modal and reload the page
+                    const editModal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
+                    editModal.hide();
+                    window.location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to update user. Please try again.');
+            });
+        });
+    }
+    
+    // Handle delete user form submission
+    const deleteUserForm = document.getElementById('delete-user-form');
+    if (deleteUserForm) {
+        deleteUserForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const userId = document.getElementById('delete-user-id').value;
+            
+            // Delete the user
+            fetch(`/api/users/${userId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                }
+            })
+            .then(response => {
+                if (response.status === 204) {
+                    // Success - reload the page
+                    window.location.reload();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Failed to delete user');
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert(error.message || 'Failed to delete user. Please try again.');
+                
+                // Close the modal
+                const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteUserModal'));
+                deleteModal.hide();
+            });
+        });
+    }
+});
+</script>
+{{ end }}

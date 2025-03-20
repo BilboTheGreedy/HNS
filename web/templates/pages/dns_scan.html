@@ -1,0 +1,169 @@
+{{ define "content" }}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">DNS Scan</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Scan DNS for existing hostnames based on a template pattern. This helps you identify which hostnames are already in use.
+                </p>
+                
+                <form id="dns-scan-form">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="template_id" class="form-label form-required">Select Template</label>
+                            <select class="form-select" id="template_id" name="template_id" required>
+                                <option value="">Select a template</option>
+                                {{ range .Templates }}
+                                <option value="{{ .ID }}">{{ .Name }} - {{ .Description }}</option>
+                                {{ end }}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3" id="sequence-range-container">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="start_seq" class="form-label form-required">Start Sequence</label>
+                                    <input type="number" class="form-control" id="start_seq" name="start_seq" value="1" min="1" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="end_seq" class="form-label form-required">End Sequence</label>
+                                    <input type="number" class="form-control" id="end_seq" name="end_seq" value="20" min="1" required>
+                                </div>
+                            </div>
+                            <div class="form-text">
+                                Range of sequence numbers to scan. Keep this reasonable (max ~100) to avoid long scan times.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="scan-params-container" class="mb-3">
+                        <!-- Template parameters will be dynamically loaded here -->
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="max_concurrent" class="form-label">Max Concurrent Checks</label>
+                            <input type="number" class="form-control" id="max_concurrent" name="max_concurrent" value="10" min="1" max="50">
+                            <div class="form-text">
+                                Number of concurrent DNS checks. Higher values are faster but may cause rate limiting.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i> Scan DNS
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-12">
+        <div id="scan-results-container">
+            <!-- Scan results will be displayed here -->
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Template select change handler
+        const templateSelect = document.getElementById('template_id');
+        if (templateSelect) {
+            templateSelect.addEventListener('change', function() {
+                const templateId = this.value;
+                
+                if (templateId) {
+                    // Show loading indicator
+                    document.getElementById('scan-params-container').innerHTML = '<div class="loader"></div>';
+                    
+                    // Fetch template details
+                    fetch(`/api/templates/${templateId}`, {
+                        headers: {
+                            'Authorization': 'Bearer ' + localStorage.getItem('token')
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            document.getElementById('scan-params-container').innerHTML = `
+                                <div class="alert alert-danger">${data.error}</div>
+                            `;
+                        } else {
+                            let paramsHtml = '';
+                            
+                            // Generate form fields for each group
+                            data.groups.forEach(group => {
+                                // Skip sequence groups
+                                if (group.validation_type === 'sequence') {
+                                    return;
+                                }
+                                
+                                let inputType = 'text';
+                                let inputHtml = '';
+                                
+                                if (group.validation_type === 'list') {
+                                    // Create select dropdown for list type
+                                    const options = group.validation_value.split(',').map(value => {
+                                        value = value.trim();
+                                        return `<option value="${value}">${value}</option>`;
+                                    }).join('');
+                                    
+                                    inputHtml = `
+                                        <select class="form-select scan-param" id="param_${group.name}" name="param_${group.name}" ${group.is_required ? 'required' : ''}>
+                                            <option value="">Select ${group.name}</option>
+                                            ${options}
+                                        </select>
+                                    `;
+                                } else if (group.validation_type === 'fixed') {
+                                    // For fixed value, show readonly input with the fixed value
+                                    inputHtml = `
+                                        <input type="text" class="form-control scan-param" id="param_${group.name}" 
+                                            name="param_${group.name}" value="${group.validation_value}" readonly>
+                                    `;
+                                } else {
+                                    // Create text input for other types
+                                    inputHtml = `
+                                        <input type="${inputType}" class="form-control scan-param" id="param_${group.name}" 
+                                            name="param_${group.name}" maxlength="${group.length}" ${group.is_required ? 'required' : ''}>
+                                    `;
+                                }
+                                
+                                paramsHtml += `
+                                    <div class="mb-3">
+                                        <label for="param_${group.name}" class="form-label ${group.is_required ? 'form-required' : ''}">
+                                            ${group.name.charAt(0).toUpperCase() + group.name.slice(1)} (${group.length} chars)
+                                        </label>
+                                        ${inputHtml}
+                                    </div>
+                                `;
+                            });
+                            
+                            document.getElementById('scan-params-container').innerHTML = paramsHtml;
+                            
+                            // Update sequence range based on template
+                            document.getElementById('start_seq').value = data.sequence_start || 1;
+                            document.getElementById('end_seq').value = (data.sequence_start || 1) + 19; // Default to 20 items
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        document.getElementById('scan-params-container').innerHTML = `
+                            <div class="alert alert-danger">
+                                Failed to fetch template details. Please try again.
+                            </div>
+                        `;
+                    });
+                } else {
+                    // Clear params if no template is selected
+                    document.getElementById('scan-params-container').innerHTML = '';
+                }
+            });
+        }
+    });
+</script>
+{{ end }}
