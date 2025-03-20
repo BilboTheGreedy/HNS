@@ -10,11 +10,15 @@ import (
 	"time"
 
 	"github.com/bilbothegreedy/HNS/internal/api"
+	"github.com/bilbothegreedy/HNS/internal/auth"
 	"github.com/bilbothegreedy/HNS/internal/config"
 	"github.com/bilbothegreedy/HNS/internal/db/migration"
+	"github.com/bilbothegreedy/HNS/internal/dns"
 	"github.com/bilbothegreedy/HNS/internal/repository/postgres"
 	"github.com/bilbothegreedy/HNS/internal/service"
+	"github.com/bilbothegreedy/HNS/internal/web"
 	"github.com/bilbothegreedy/HNS/pkg/utils"
+	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -57,8 +61,44 @@ func main() {
 	resService := service.NewReservationService(hostRepo, templateRepo)
 	seqService := service.NewSequenceService(hostRepo)
 
-	// Setup API server
-	router := api.SetupRouter(cfg, genService, resService, seqService, userRepo)
+	// Create auth components
+	jwtManager := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiration)
+	apiKeyManager := auth.NewAPIKeyManager(userRepo, cfg.Auth.APIKeyExpiration)
+
+	// Create DNS checker
+	dnsChecker := dns.NewDNSChecker(cfg.DNS)
+
+	// Setup Gin router
+	router := gin.Default()
+
+	// Setup API routes
+	api.SetupRouter(
+		router,
+		genService,
+		resService,
+		seqService,
+		userRepo,
+		jwtManager,
+		apiKeyManager,
+		dnsChecker,
+	)
+
+	// Create web handler
+	webHandler := web.NewWebHandler(
+		templateRepo,
+		hostRepo,
+		userRepo,
+		jwtManager,
+		genService,
+		resService,
+		dnsChecker,
+		seqService,
+	)
+
+	// Setup web routes
+	web.SetupWebRouter(router, webHandler)
+
+	// Create server
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler: router,
