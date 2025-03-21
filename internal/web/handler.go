@@ -83,7 +83,7 @@ func SetupWebRouter(
 	})
 
 	// Load templates
-	router.LoadHTMLGlob("web/templates/**/*.html")
+	router.LoadHTMLGlob("internal/web/templates/layouts/**/*.html")
 	router.Static("/static", "./web/static")
 
 	// Public routes
@@ -208,51 +208,51 @@ func (h *WebHandler) AdminRequired() gin.HandlerFunc {
 }
 
 func formatTime(t time.Time) string {
-    return t.Format("Jan 02, 2006 15:04:05")
+	return t.Format("Jan 02, 2006 15:04:05")
 }
 
 func formatDate(t time.Time) string {
-    return t.Format("Jan 02, 2006")
+	return t.Format("Jan 02, 2006")
 }
 
 func substring(s string, start, length int) string {
-    if start < 0 || start > len(s) {
-        return ""
-    }
-    if length <= 0 {
-        return ""
-    }
-    if start+length > len(s) {
-        length = len(s) - start
-    }
-    return s[start : start+length]
+	if start < 0 || start > len(s) {
+		return ""
+	}
+	if length <= 0 {
+		return ""
+	}
+	if start+length > len(s) {
+		length = len(s) - start
+	}
+	return s[start : start+length]
 }
 
 func plus(a, b int) int {
-    return a + b
+	return a + b
 }
 
 func minus(a, b int) int {
-    return a - b
+	return a - b
 }
 
 func multiply(a, b int) int {
-    return a * b
+	return a * b
 }
 
 func min(a, b int) int {
-    if a < b {
-        return a
-    }
-    return b
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func splitString(s, sep string) []string {
-    return strings.Split(s, sep)
+	return strings.Split(s, sep)
 }
 
 func getCurrentYear() int {
-    return time.Now().Year()
+	return time.Now().Year()
 }
 
 // getAlert extracts and clears any alert message from the session
