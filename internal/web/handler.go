@@ -83,7 +83,7 @@ func SetupWebRouter(
 	})
 
 	// Load templates
-	router.LoadHTMLGlob("internal/web/templates/layouts/**/*.html")
+	router.LoadHTMLGlob("web/templates/**/*")
 	router.Static("/static", "./web/static")
 
 	// Public routes
