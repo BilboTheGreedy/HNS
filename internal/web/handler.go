@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -82,9 +83,15 @@ func SetupWebRouter(
 		"getCurrentYear": getCurrentYear,
 	})
 
-	// Load templates
-	router.LoadHTMLGlob("web/templates/**/*")
-	router.Static("/static", "./web/static")
+	// Load templates - FIXED PATH
+	templatesPath := filepath.Join("internal", "web", "templates", "**", "*")
+	log.Info().Str("templates_path", templatesPath).Msg("Loading templates")
+	router.LoadHTMLGlob(templatesPath)
+
+	// Static files path - FIXED PATH
+	staticPath := filepath.Join("internal", "web", "static")
+	log.Info().Str("static_path", staticPath).Msg("Setting up static files")
+	router.Static("/static", staticPath)
 
 	// Public routes
 	router.GET("/", webHandler.Home)
@@ -95,9 +102,21 @@ func SetupWebRouter(
 	router.GET("/logout", webHandler.Logout)
 
 	// Error pages
-	router.GET("/404", func(c *gin.Context) { c.HTML(http.StatusNotFound, "404", nil) })
-	router.GET("/403", func(c *gin.Context) { c.HTML(http.StatusForbidden, "403", nil) })
-	router.GET("/500", func(c *gin.Context) { c.HTML(http.StatusInternalServerError, "500", nil) })
+	router.GET("/404", func(c *gin.Context) {
+		c.HTML(http.StatusNotFound, "pages/404.html", gin.H{
+			"Title": "Page Not Found",
+		})
+	})
+	router.GET("/403", func(c *gin.Context) {
+		c.HTML(http.StatusForbidden, "pages/403.html", gin.H{
+			"Title": "Access Denied",
+		})
+	})
+	router.GET("/500", func(c *gin.Context) {
+		c.HTML(http.StatusInternalServerError, "pages/500.html", gin.H{
+			"Title": "Internal Server Error",
+		})
+	})
 
 	// Protected routes
 	auth := router.Group("/")
@@ -149,7 +168,9 @@ func SetupWebRouter(
 
 	// 404 handler
 	router.NoRoute(func(c *gin.Context) {
-		c.HTML(http.StatusNotFound, "404", nil)
+		c.HTML(http.StatusNotFound, "pages/404.html", gin.H{
+			"Title": "Page Not Found",
+		})
 	})
 }
 
@@ -184,8 +205,6 @@ func (h *WebHandler) AuthRequired() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
-// AdminRequired middleware checks if user is an admin
 func (h *WebHandler) AdminRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user, exists := c.Get("user")
@@ -196,7 +215,7 @@ func (h *WebHandler) AdminRequired() gin.HandlerFunc {
 		}
 
 		if user.(*models.User).Role != models.RoleAdmin {
-			c.HTML(http.StatusForbidden, "403", gin.H{
+			c.HTML(http.StatusForbidden, "pages/403.html", gin.H{
 				"Title": "Access Denied",
 			})
 			c.Abort()
@@ -206,7 +225,6 @@ func (h *WebHandler) AdminRequired() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
 func formatTime(t time.Time) string {
 	return t.Format("Jan 02, 2006 15:04:05")
 }
@@ -313,7 +331,19 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data gin.H) {
 	// Add current year for footer
 	data["CurrentYear"] = time.Now().Year()
 
+	// Check if name already includes the directory prefix
+	if !strings.Contains(name, "/") {
+		// Prefix with pages/ directory if not already included
+		name = "pages/" + name
+	}
+
+	// Check if name already includes extension
+	if !strings.HasSuffix(name, ".html") {
+		name = name + ".html"
+	}
+
 	// Render template
+	log.Info().Str("template", name).Msg("Rendering template")
 	c.HTML(http.StatusOK, name, data)
 }
 
