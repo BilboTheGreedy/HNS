@@ -120,12 +120,11 @@ func SetupWebRouter(
 		"getCurrentYear": getCurrentYear,
 	})
 
-	// Load templates using existing structure
+	// Load templates with proper structure
 	templatesPath := filepath.Join("internal", "web", "templates")
-	log.Info().Str("templates_path", templatesPath).Msg("Loading templates")
-
-	// Load templates without requiring .tmpl extension
 	router.LoadHTMLGlob(filepath.Join(templatesPath, "**", "*.html"))
+	// Add pattern for partials if needed
+	router.LoadHTMLGlob(filepath.Join(templatesPath, "partials", "*.html"))
 
 	// Static files path
 	staticPath := filepath.Join("internal", "web", "static")
@@ -370,7 +369,6 @@ func setAlert(c *gin.Context, alertType, message string) {
 	session.Save()
 }
 
-// Update the renderTemplate function to work with existing templates
 func (h *WebHandler) renderTemplate(c *gin.Context, name string, data gin.H) {
 	// Add common template data
 	if data == nil {
@@ -393,18 +391,12 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data gin.H) {
 		data["Alert"] = alert
 	}
 
-	// Add page title if not set
-	if _, exists := data["Title"]; !exists {
-		data["Title"] = "Hostname Management"
-	}
-
 	// Add current year for footer
 	data["CurrentYear"] = time.Now().Year()
 
-	// Simple direct template rendering - no error handling
-	templatePath := "pages/" + name + ".html"
-	log.Info().Str("template", templatePath).Msg("Rendering template")
-
+	// Use either the page with base template or direct template based on name
+	templatePath := name
+	// Check if template uses base layout or is standalone
 	c.HTML(http.StatusOK, templatePath, data)
 }
 
