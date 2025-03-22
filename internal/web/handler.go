@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -83,6 +84,40 @@ func setupSessionStore(router *gin.Engine) {
 	router.Use(sessions.Sessions("hns_session", store))
 }
 
+var templateFuncMap = template.FuncMap{
+	"formatTime": func(t time.Time) string {
+		return t.Format("2006-01-02 15:04:05")
+	},
+	"formatDate": func(t time.Time) string {
+		return t.Format("2006-01-02")
+	},
+	"substr": func(s string, start, length int) string {
+		if start >= len(s) {
+			return ""
+		}
+		end := start + length
+		if end > len(s) {
+			end = len(s)
+		}
+		return s[start:end]
+	},
+	"plus": func(a, b int) int {
+		return a + b
+	},
+	"minus": func(a, b int) int {
+		return a - b
+	},
+	"multiply": func(a, b int) int {
+		return a * b
+	},
+	"min": func(a, b int) int {
+		if a < b {
+			return a
+		}
+		return b
+	},
+}
+
 // setupWebRouter sets up template loading correctly
 func SetupWebRouter(
 	router *gin.Engine,
@@ -120,11 +155,19 @@ func SetupWebRouter(
 		"getCurrentYear": getCurrentYear,
 	})
 
-	// Load templates with proper structure
-	templatesPath := filepath.Join("internal", "web", "templates")
-	router.LoadHTMLGlob(filepath.Join(templatesPath, "**", "*.html"))
-	// Add pattern for partials if needed
-	router.LoadHTMLGlob(filepath.Join(templatesPath, "partials", "*.html"))
+	// Setup template loading correctly
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to get working directory")
+	}
+
+	templatesDir := filepath.Join(wd, "internal", "web", "templates")
+
+	tmpl := template.New("").Funcs(templateFuncMap)
+	template.Must(tmpl.ParseGlob(filepath.Join(templatesDir, "base", "*.html")))
+	template.Must(tmpl.ParseGlob(filepath.Join(templatesDir, "pages", "*.html")))
+	template.Must(tmpl.ParseGlob(filepath.Join(templatesDir, "partials", "*.html")))
+	router.SetHTMLTemplate(tmpl)
 
 	// Static files path
 	staticPath := filepath.Join("internal", "web", "static")
@@ -394,10 +437,9 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data gin.H) {
 	// Add current year for footer
 	data["CurrentYear"] = time.Now().Year()
 
-	// Use either the page with base template or direct template based on name
-	templatePath := name
-	// Check if template uses base layout or is standalone
-	c.HTML(http.StatusOK, templatePath, data)
+	// Important: Use the base template, not the page name directly
+	// This is the key change - we render "base.html" and the content template is used via inheritance
+	c.HTML(http.StatusOK, "base.html", data)
 }
 
 // getPaginationData prepares pagination data for templates
@@ -486,16 +528,15 @@ func (h *WebHandler) Home(c *gin.Context) {
 
 // LoginPage renders the login page
 func (h *WebHandler) LoginPage(c *gin.Context) {
-	// If already logged in, redirect to home
 	session := sessions.Default(c)
-	userID := session.Get("userID")
-	if userID != nil {
-		c.Redirect(http.StatusFound, "/hostnames") // Redirect to a known working page
+	if session.Get("userID") != nil {
+		c.Redirect(http.StatusFound, "/")
 		return
 	}
 
-	h.renderTemplate(c, "login", gin.H{
+	h.renderTemplate(c, "base.html", gin.H{
 		"Title": "Login",
+		"Page":  "login", // 🔥 This selects which sub-template to render
 	})
 }
 

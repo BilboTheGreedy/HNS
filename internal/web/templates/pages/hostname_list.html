@@ -1,171 +1,42 @@
 {{ define "content" }}
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Hostname Management</h5>
-                <div>
-                    <a href="/hostnames/generate" class="btn btn-sm btn-outline-primary me-2">
-                        <i class="fas fa-magic"></i> Generate
-                    </a>
-                    <a href="/hostnames/reserve" class="btn btn-sm btn-outline-warning">
-                        <i class="fas fa-bookmark"></i> Reserve
-                    </a>
-                </div>
-            </div>
-            <div class="card-body">
-                <form id="hostname-search-form" method="GET" action="/hostnames">
-                    <div class="row">
-                        <div class="col-md-3 mb-3">
-                            <label for="name" class="form-label">Hostname</label>
-                            <input type="text" class="form-control" id="name" name="name" value="{{ .Filters.name }}">
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label for="template_id" class="form-label">Template</label>
-                            <select class="form-select" id="template_id" name="template_id">
-                                <option value="">All Templates</option>
-                                {{ range .Templates }}
-                                <option value="{{ .ID }}" {{ if eq $.Filters.template_id .ID }}selected{{ end }}>{{ .Name }}</option>
-                                {{ end }}
-                            </select>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label for="status" class="form-label">Status</label>
-                            <select class="form-select" id="status" name="status">
-                                <option value="">All Statuses</option>
-                                <option value="available" {{ if eq .Filters.status "available" }}selected{{ end }}>Available</option>
-                                <option value="reserved" {{ if eq .Filters.status "reserved" }}selected{{ end }}>Reserved</option>
-                                <option value="committed" {{ if eq .Filters.status "committed" }}selected{{ end }}>Committed</option>
-                                <option value="released" {{ if eq .Filters.status "released" }}selected{{ end }}>Released</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label for="reserved_by" class="form-label">Reserved By</label>
-                            <input type="text" class="form-control" id="reserved_by" name="reserved_by" value="{{ .Filters.reserved_by }}">
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-search"></i> Search
-                            </button>
-                            <a href="/hostnames" class="btn btn-secondary">
-                                <i class="fas fa-redo"></i> Reset
-                            </a>
-                        </div>
-                    </div>
-                </form>
-            </div>
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Hostnames</h5>
+            <span>Showing {{ .Offset | plus 1 }} to {{ .Offset | plus .Limit | min .Total }} of {{ .Total }}</span>
         </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Hostnames</h5>
-                <span>Showing {{ .Offset | plus 1 }} to {{ .Offset | plus .Limit | min .Total }} of {{ .Total }} hostnames</span>
+        <div class="card-body">
+            {{ if .Hostnames }}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr><th>Name</th><th>Template</th><th>Status</th><th>Seq</th><th>Reserved By</th><th>At</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        {{ range .Hostnames }}
+                        <tr>
+                            <td><a href="/hostnames/{{ .ID }}">{{ .Name }}</a></td>
+                            <td>{{ .TemplateName }}</td>
+                            <td><span class="badge status-{{ .Status }}">{{ .Status }}</span></td>
+                            <td>{{ .SequenceNum }}</td>
+                            <td>{{ .ReservedBy }}</td>
+                            <td>{{ .ReservedAt | formatTime }}</td>
+                            <td>
+                                <a href="/hostnames/{{ .ID }}" class="btn btn-sm btn-info">View</a>
+                                {{ if eq .Status "reserved" }}
+                                <a href="/hostnames/{{ .ID }}/commit" class="btn btn-sm btn-primary">Commit</a>
+                                {{ else if eq .Status "committed" }}
+                                <a href="/hostnames/{{ .ID }}/release" class="btn btn-sm btn-secondary">Release</a>
+                                {{ end }}
+                            </td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
             </div>
-            <div class="card-body">
-                {{ if .Hostnames }}
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Hostname</th>
-                                <th>Template</th>
-                                <th>Status</th>
-                                <th>Sequence</th>
-                                <th>Reserved By</th>
-                                <th>Reserved At</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {{ range .Hostnames }}
-                            <tr>
-                                <td><a href="/hostnames/{{ .ID }}">{{ .Name }}</a></td>
-                                <td>{{ .TemplateName }}</td>
-                                <td>
-                                    {{ if eq .Status "available" }}
-                                    <span class="badge status-available">Available</span>
-                                    {{ else if eq .Status "reserved" }}
-                                    <span class="badge status-reserved">Reserved</span>
-                                    {{ else if eq .Status "committed" }}
-                                    <span class="badge status-committed">Committed</span>
-                                    {{ else if eq .Status "released" }}
-                                    <span class="badge status-released">Released</span>
-                                    {{ end }}
-                                </td>
-                                <td><span class="sequence-num">{{ .SequenceNum }}</span></td>
-                                <td>{{ .ReservedBy }}</td>
-                                <td>{{ .ReservedAt | formatTime }}</td>
-                                <td>
-                                    {{ if eq .Status "reserved" }}
-                                    <a href="/hostnames/{{ .ID }}/commit" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-check"></i> Commit
-                                    </a>
-                                    {{ else if eq .Status "committed" }}
-                                    <a href="/hostnames/{{ .ID }}/release" class="btn btn-sm btn-secondary">
-                                        <i class="fas fa-undo"></i> Release
-                                    </a>
-                                    {{ end }}
-                                    <a href="/hostnames/{{ .ID }}" class="btn btn-sm btn-info">
-                                        <i class="fas fa-eye"></i> View
-                                    </a>
-                                </td>
-                            </tr>
-                            {{ end }}
-                        </tbody>
-                    </table>
-                </div>
-                
-                <!-- Pagination -->
-                <nav aria-label="Hostname pagination">
-                    <ul class="pagination justify-content-center">
-                        {{ if gt .Offset 0 }}
-                        <li class="page-item">
-                            <a class="page-link" href="{{ .PaginationURL }}&offset={{ .Offset | minus .Limit }}&limit={{ .Limit }}">
-                                <i class="fas fa-chevron-left"></i> Previous
-                            </a>
-                        </li>
-                        {{ else }}
-                        <li class="page-item disabled">
-                            <span class="page-link"><i class="fas fa-chevron-left"></i> Previous</span>
-                        </li>
-                        {{ end }}
-                        
-                        {{ range .Pages }}
-                        <li class="page-item {{ if eq . $.CurrentPage }}active{{ end }}">
-                            <a class="page-link" href="{{ $.PaginationURL }}&offset={{ . | minus 1 | multiply $.Limit }}&limit={{ $.Limit }}">
-                                {{ . }}
-                            </a>
-                        </li>
-                        {{ end }}
-                        
-                        {{ if lt .NextOffset .Total }}
-                        <li class="page-item">
-                            <a class="page-link" href="{{ .PaginationURL }}&offset={{ .NextOffset }}&limit={{ .Limit }}">
-                                Next <i class="fas fa-chevron-right"></i>
-                            </a>
-                        </li>
-                        {{ else }}
-                        <li class="page-item disabled">
-                            <span class="page-link">Next <i class="fas fa-chevron-right"></i></span>
-                        </li>
-                        {{ end }}
-                    </ul>
-                </nav>
-                
-                {{ else }}
-                <div class="text-center py-5">
-                    <i class="fas fa-search fa-3x mb-3 text-muted"></i>
-                    <p class="lead">No hostnames found matching your criteria</p>
-                    <a href="/hostnames/generate" class="btn btn-primary mt-3">Generate Hostname</a>
-                </div>
-                {{ end }}
-            </div>
+            {{ else }}
+            <p class="text-muted text-center">No hostnames found.</p>
+            {{ end }}
         </div>
     </div>
 </div>

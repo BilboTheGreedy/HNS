@@ -1,0 +1,36 @@
+{{ define "partials/footer.html" }}
+<!-- Footer -->
+<footer class="footer mt-auto py-3 bg-light">
+    <div class="container">
+        <div class="d-flex justify-content-between">
+            <span class="text-muted">Hostname Naming System &copy; {{ .CurrentYear }}</span>
+            <span class="text-muted">Made with <i class="fas fa-heart text-danger"></i> for your infrastructure</span>
+        </div>
+    </div>
+</footer>
+
+<!-- Bootstrap Bundle with Popper -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Main JavaScript -->
+<script src="/static/js/main.js"></script>
+
+<!-- Initialize tooltips and popovers -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        if (tooltipTriggerList.length) {
+            [...tooltipTriggerList].map(el => new bootstrap.Tooltip(el));
+        }
+
+        // Initialize popovers
+        const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+        if (popoverTriggerList.length) {
+            [...popoverTriggerList].map(el => new bootstrap.Popover(el));
+        }
+    });
+</script>
+
+<!-- Page-specific scripts -->
+{{ block "scripts" . }}{{ end }}
+{{ end }}
