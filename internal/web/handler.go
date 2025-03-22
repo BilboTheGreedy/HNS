@@ -18,6 +18,7 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // WebHandler handles web requests and template rendering
@@ -61,13 +62,49 @@ func NewWebHandler(
 	}
 }
 
+func setupSessionStore(router *gin.Engine) {
+	// Setup sessions with correct key sizes for AES encryption
+	// AES-256 requires exactly 32 bytes (256 bits) for the key
+	authKey := []byte("01234567890123456789012345678901")       // Exactly 32 bytes
+	encryptionKey := []byte("98765432109876543210987654321098") // Exactly 32 bytes
+
+	// Use more secure store with encryption
+	store := cookie.NewStore(authKey, encryptionKey)
+
+	// Configure cookie options
+	store.Options(sessions.Options{
+		Path:     "/",
+		MaxAge:   86400, // 1 day
+		HttpOnly: true,
+		Secure:   false, // Change to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	router.Use(sessions.Sessions("hns_session", store))
+}
+
 // SetupWebRouter sets up the web routes
 func SetupWebRouter(
 	router *gin.Engine,
 	webHandler *WebHandler,
 ) {
-	// Setup sessions
-	store := cookie.NewStore([]byte("hns_secret_key"))
+	// Setup sessions with correct key sizes for AES encryption
+	// AES-256 requires exactly 32 bytes (256 bits) for the key
+	authKey := []byte("01234567890123456789012345678901")       // Exactly 32 bytes
+	encryptionKey := []byte("98765432109876543210987654321098") // Exactly 32 bytes
+
+	// Use more secure store with encryption
+	store := cookie.NewStore(authKey, encryptionKey)
+
+	// Configure cookie options
+	store.Options(sessions.Options{
+		Path:     "/",
+		MaxAge:   86400, // 1 day
+		HttpOnly: true,
+		Secure:   false, // Change to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	router.Use(sessions.Sessions("hns_session", store))
 
 	// Setup template functions
@@ -115,6 +152,27 @@ func SetupWebRouter(
 	router.GET("/500", func(c *gin.Context) {
 		c.HTML(http.StatusInternalServerError, "pages/500.html", gin.H{
 			"Title": "Internal Server Error",
+		})
+	})
+
+	// Add a simple auth test route
+	router.GET("/auth-test", func(c *gin.Context) {
+		session := sessions.Default(c)
+		userID := session.Get("userID")
+		username := session.Get("username")
+
+		if userID == nil {
+			c.JSON(http.StatusOK, gin.H{
+				"authenticated": false,
+				"message":       "Not logged in",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"authenticated": true,
+			"userID":        userID,
+			"username":      username,
 		})
 	})
 
@@ -179,7 +237,17 @@ func (h *WebHandler) AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
 		userID := session.Get("userID")
+
+		// Debug log session data
+		log.Info().
+			Interface("userID", userID).
+			Interface("username", session.Get("username")).
+			Interface("loggedIn", session.Get("loggedIn")).
+			Str("path", c.Request.URL.Path).
+			Msg("Auth check - session data")
+
 		if userID == nil {
+			log.Warn().Str("path", c.Request.URL.Path).Msg("No userID in session, redirecting to login")
 			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
 			return
@@ -188,6 +256,7 @@ func (h *WebHandler) AuthRequired() gin.HandlerFunc {
 		// Get user data for templates
 		user, err := h.userRepo.GetByID(c.Request.Context(), userID.(int64))
 		if err != nil {
+			log.Error().Err(err).Msg("Failed to get user by ID")
 			session.Clear()
 			session.Save()
 			c.Redirect(http.StatusFound, "/login")
@@ -434,9 +503,10 @@ func (h *WebHandler) Home(c *gin.Context) {
 // LoginPage renders the login page
 func (h *WebHandler) LoginPage(c *gin.Context) {
 	// If already logged in, redirect to home
-	loggedIn, exists := c.Get("loggedIn")
-	if exists && loggedIn.(bool) {
-		c.Redirect(http.StatusFound, "/")
+	session := sessions.Default(c)
+	userID := session.Get("userID")
+	if userID != nil {
+		c.Redirect(http.StatusFound, "/hostnames") // Redirect to a known working page
 		return
 	}
 
@@ -450,39 +520,65 @@ func (h *WebHandler) Login(c *gin.Context) {
 	username := c.PostForm("username")
 	password := c.PostForm("password")
 
+	log.Info().Str("username", username).Msg("Web UI Login attempt")
+
 	// Get user by username
 	user, err := h.userRepo.GetByUsername(c.Request.Context(), username)
 	if err != nil {
+		log.Error().Err(err).Str("username", username).Msg("User not found during login")
 		setAlert(c, "danger", "Invalid username or password")
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
 
-	// Verify credentials
-	loginReq := &models.LoginRequest{
-		Username: username,
-		Password: password,
-	}
-
-	// Create a temporary auth handler to validate credentials
-	authHandler := auth.NewAuthHandler(h.userRepo, h.jwtManager, nil)
-	token, err := authHandler.ValidateCredentials(c.Request.Context(), loginReq)
+	// Verify password directly instead of using the JWT auth flow
+	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
+		log.Error().Err(err).Str("username", username).Msg("Invalid password")
 		setAlert(c, "danger", "Invalid username or password")
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
 
-	// Set session data
+	log.Info().Str("username", username).Msg("Authentication successful, setting session")
+
+	// Create a new clean session
 	session := sessions.Default(c)
+	session.Clear()
+
+	// Set session data explicitly
 	session.Set("userID", user.ID)
 	session.Set("username", user.Username)
 	session.Set("isAdmin", user.Role == models.RoleAdmin)
-	session.Set("token", token)
-	session.Save()
+	session.Set("loggedIn", true) // Add explicit loggedIn flag
 
-	// Redirect to dashboard
-	c.Redirect(http.StatusFound, "/")
+	// Also generate JWT token for API access
+	if h.jwtManager != nil {
+		token, err := h.jwtManager.GenerateToken(user)
+		if err == nil {
+			session.Set("token", token)
+		}
+	}
+
+	// Save session immediately
+	err = session.Save()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to save session")
+		setAlert(c, "danger", "Login failed due to session error")
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+
+	// For this request, set context values directly
+	c.Set("user", user)
+	c.Set("userID", user.ID)
+	c.Set("username", user.Username)
+	c.Set("isAdmin", user.Role == models.RoleAdmin)
+	c.Set("loggedIn", true)
+
+	// Redirect to hostnames page instead of dashboard (known working page)
+	log.Info().Str("username", username).Msg("Session saved, redirecting to hostnames page")
+	c.Redirect(http.StatusFound, "/hostnames")
 }
 
 // RegisterPage renders the registration page
