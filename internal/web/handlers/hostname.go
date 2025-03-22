@@ -208,7 +208,7 @@ func (h *HostnameHandler) GenerateHostname(c *gin.Context) {
 	// Get form data
 	templateIDStr := c.PostForm("template_id")
 	sequenceNumStr := c.PostForm("sequence_num")
-	checkDNS := c.PostForm("check_dns") == "on"
+	//checkDNS := c.PostForm("check_dns") == "on"
 
 	templateID, err := strconv.ParseInt(templateIDStr, 10, 64)
 	if err != nil {

@@ -131,7 +131,7 @@ func (h *TemplateHandler) CreateTemplate(c *gin.Context) {
 	sequenceLengthStr := c.PostForm("sequence_length")
 	sequencePadding := c.PostForm("sequence_padding") == "on"
 	sequenceIncrementStr := c.PostForm("sequence_increment")
-	isActive := c.PostForm("is_active") == "on"
+	//isActive := c.PostForm("is_active") == "on"
 
 	// Parse numeric values
 	maxLength, _ := strconv.Atoi(maxLengthStr)

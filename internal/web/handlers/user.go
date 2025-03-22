@@ -3,7 +3,6 @@ package handlers
 import (
 	"strconv"
 
-	"github.com/bilbothegreedy/HNS/internal/auth"
 	"github.com/bilbothegreedy/HNS/internal/models"
 	"github.com/bilbothegreedy/HNS/internal/repository"
 	"github.com/bilbothegreedy/HNS/internal/web/helpers"
@@ -29,90 +28,6 @@ func NewUserHandler(
 		userRepo:     userRepo,
 		hostnameRepo: hostnameRepo,
 	}
-}
-
-// UserProfile displays the user profile page
-func (h *UserHandler) UserProfile(c *gin.Context) {
-	// Get user from database
-	ctx := c.Request.Context()
-	user, err := h.userRepo.GetByID(ctx, id)
-	if err != nil {
-		h.RedirectWithAlert(c, "/admin/users", "danger", "User not found")
-		return
-	}
-
-	// Get form data
-	email := c.PostForm("email")
-	firstName := c.PostForm("first_name")
-	lastName := c.PostForm("last_name")
-	role := c.PostForm("role")
-	password := c.PostForm("password")
-	isActive := c.PostForm("is_active") == "on"
-
-	// Update user fields
-	user.Email = email
-	user.FirstName = firstName
-	user.LastName = lastName
-	user.Role = models.Role(role)
-	user.IsActive = isActive
-
-	// Update password if provided
-	if password != "" {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to hash password")
-			h.RedirectWithAlert(c, "/admin/users", "danger", "Failed to update password")
-			return
-		}
-		user.PasswordHash = string(hashedPassword)
-	}
-
-	// Save changes
-	err = h.userRepo.Update(ctx, user)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to update user")
-		h.RedirectWithAlert(c, "/admin/users", "danger", "Failed to update user")
-		return
-	}
-
-	// Success
-	h.RedirectWithAlert(c, "/admin/users", "success", "User updated successfully")
-}
-
-// DeleteUser handles user deletion (admin only)
-func (h *UserHandler) DeleteUser(c *gin.Context) {
-	// Check admin access
-	isAdmin, exists := c.Get("isAdmin")
-	if !exists || !isAdmin.(bool) {
-		h.Forbidden(c)
-		return
-	}
-
-	// Get user ID
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		h.RedirectWithAlert(c, "/admin/users", "danger", "Invalid user ID")
-		return
-	}
-
-	// Check if trying to delete self
-	userID, _ := c.Get("userID")
-	if userID.(int64) == id {
-		h.RedirectWithAlert(c, "/admin/users", "danger", "Cannot delete your own account")
-		return
-	}
-
-	// Delete user
-	err = h.userRepo.Delete(c.Request.Context(), id)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to delete user")
-		h.RedirectWithAlert(c, "/admin/users", "danger", "Failed to delete user")
-		return
-	}
-
-	// Success
-	h.RedirectWithAlert(c, "/admin/users", "success", "User deleted successfully")
 }
 
 // ViewUser displays user details (admin only)
@@ -159,16 +74,21 @@ func (h *UserHandler) ViewUser(c *gin.Context) {
 	})
 }
 
-	user, exists := c.Get("user")
+// UserProfile displays the user profile page
+func (h *UserHandler) UserProfile(c *gin.Context) {
+	// Get user from context
+	userInterface, exists := c.Get("user")
 	if !exists {
 		c.Redirect(302, "/login")
 		return
 	}
 
+	user := userInterface.(*models.User)
+
 	// Get user's recent hostnames
 	ctx := c.Request.Context()
 	filters := map[string]interface{}{
-		"reserved_by": user.(*models.User).Username,
+		"reserved_by": user.Username,
 	}
 	recentHostnames, _, err := h.hostnameRepo.List(ctx, 5, 0, filters)
 	if err != nil {
@@ -176,9 +96,9 @@ func (h *UserHandler) ViewUser(c *gin.Context) {
 	}
 
 	// Get statistics
-	reservedCount, _ := h.hostnameRepo.CountByUser(ctx, user.(*models.User).Username, models.StatusReserved)
-	committedCount, _ := h.hostnameRepo.CountByUser(ctx, user.(*models.User).Username, models.StatusCommitted)
-	releasedCount, _ := h.hostnameRepo.CountByUser(ctx, user.(*models.User).Username, models.StatusReleased)
+	reservedCount, _ := h.hostnameRepo.CountByUser(ctx, user.Username, models.StatusReserved)
+	committedCount, _ := h.hostnameRepo.CountByUser(ctx, user.Username, models.StatusCommitted)
+	releasedCount, _ := h.hostnameRepo.CountByUser(ctx, user.Username, models.StatusReleased)
 
 	stats := gin.H{
 		"Reserved":  reservedCount,
@@ -234,11 +154,47 @@ func (h *UserHandler) ViewUser(c *gin.Context) {
 	h.RenderTemplate(c, "user_profile", gin.H{
 		"Title":           "My Profile",
 		"ActivePage":      "profile",
-		"User":            user.(*models.User),
+		"User":            user,
 		"RecentHostnames": recentHostnames,
 		"Activities":      activities,
 		"Stats":           stats,
 	})
+}
+
+// DeleteUser handles user deletion (admin only)
+func (h *UserHandler) DeleteUser(c *gin.Context) {
+	// Check admin access
+	isAdmin, exists := c.Get("isAdmin")
+	if !exists || !isAdmin.(bool) {
+		h.Forbidden(c)
+		return
+	}
+
+	// Get user ID
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		h.RedirectWithAlert(c, "/admin/users", "danger", "Invalid user ID")
+		return
+	}
+
+	// Check if trying to delete self
+	userID, _ := c.Get("userID")
+	if userID.(int64) == id {
+		h.RedirectWithAlert(c, "/admin/users", "danger", "Cannot delete your own account")
+		return
+	}
+
+	// Delete user
+	err = h.userRepo.Delete(c.Request.Context(), id)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete user")
+		h.RedirectWithAlert(c, "/admin/users", "danger", "Failed to delete user")
+		return
+	}
+
+	// Success
+	h.RedirectWithAlert(c, "/admin/users", "success", "User deleted successfully")
 }
 
 // UpdateProfile handles profile update form submission
@@ -520,96 +476,14 @@ func (h *UserHandler) EditUser(c *gin.Context) {
 		return
 	}
 
+	// Define available roles directly
+	roles := []string{"admin", "user"}
+
 	// Render template
 	h.RenderTemplate(c, "admin_user_edit", gin.H{
 		"Title":      "Edit User",
 		"ActivePage": "admin",
 		"User":       user,
-		"Roles":      models.GetAllRoles(),
-	})
-}
-
-// RenderUserProfile renders the user profile page
-func (h *UserHandler) RenderUserProfile(c *gin.Context) {
-	// Get user
-	user, exists := c.Get("user")
-	if !exists {
-		c.Redirect(302, "/login")
-		return
-	}
-
-	// Get user's recent hostnames
-	ctx := c.Request.Context()
-	filters := map[string]interface{}{
-		"reserved_by": user.(*models.User).Username,
-	}
-	recentHostnames, _, err := h.hostnameRepo.List(ctx, 5, 0, filters)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to get user's recent hostnames")
-	}
-
-	// Get statistics
-	reservedCount, _ := h.hostnameRepo.CountByUser(ctx, user.(*models.User).Username, models.StatusReserved)
-	committedCount, _ := h.hostnameRepo.CountByUser(ctx, user.(*models.User).Username, models.StatusCommitted)
-	releasedCount, _ := h.hostnameRepo.CountByUser(ctx, user.(*models.User).Username, models.StatusReleased)
-
-	stats := gin.H{
-		"Reserved":  reservedCount,
-		"Committed": committedCount,
-		"Released":  releasedCount,
-		"Total":     reservedCount + committedCount + releasedCount,
-	}
-
-	// Format recent activities
-	type Activity struct {
-		ID        int64
-		Name      string
-		Action    string
-		Status    string
-		Timestamp interface{}
-	}
-
-	activities := make([]Activity, 0)
-	for _, hostname := range recentHostnames {
-		// Add reservation activity
-		activities = append(activities, Activity{
-			ID:        hostname.ID,
-			Name:      hostname.Name,
-			Action:    "Reserved",
-			Status:    string(hostname.Status),
-			Timestamp: hostname.ReservedAt,
-		})
-
-		// Add commit activity if committed
-		if hostname.CommittedAt != nil {
-			activities = append(activities, Activity{
-				ID:        hostname.ID,
-				Name:      hostname.Name,
-				Action:    "Committed",
-				Status:    string(hostname.Status),
-				Timestamp: hostname.CommittedAt,
-			})
-		}
-
-		// Add release activity if released
-		if hostname.ReleasedAt != nil {
-			activities = append(activities, Activity{
-				ID:        hostname.ID,
-				Name:      hostname.Name,
-				Action:    "Released",
-				Status:    string(hostname.Status),
-				Timestamp: hostname.ReleasedAt,
-			})
-		}
-	}
-
-	// Render template
-	h.RenderTemplate(c, "user_profile", gin.H{
-		"Title":           "My Profile",
-		"ActivePage":      "profile",
-		"User":            user.(*models.User),
-		"RecentHostnames": recentHostnames,
-		"Activities":      activities,
-		"Stats":           stats,
+		"Roles":      roles,
 	})
 }

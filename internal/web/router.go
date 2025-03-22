@@ -83,7 +83,11 @@ func SetupWebRouter(
 			"CurrentYear": helpers.GetCurrentYear(),
 		})
 	})
-
+	router.Use(func(c *gin.Context) {
+		// Extract session data and add to context
+		helpers.AddContextUserData(c)
+		c.Next()
+	})
 	// Protected routes
 	auth := router.Group("/")
 	auth.Use(authMw.AuthRequired())

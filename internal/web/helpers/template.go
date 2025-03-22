@@ -103,18 +103,21 @@ func Initials(firstName, lastName string) string {
 }
 
 // GetPaginationParams extracts pagination parameters from request query
+// GetPaginationParams extracts pagination parameters from request query
 func GetPaginationParams(c *gin.Context) (limit, offset int) {
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
 
+	// Parse limit
 	var err error
 	limit, err = parseInt(limitStr, 10)
-	if err || limit <= 0 {
+	if err != nil || limit <= 0 {
 		limit = 10
 	}
 
+	// Parse offset
 	offset, err = parseInt(offsetStr, 0)
-	if err || offset < 0 {
+	if err != nil || offset < 0 {
 		offset = 0
 	}
 
