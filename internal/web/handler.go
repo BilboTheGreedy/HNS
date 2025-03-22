@@ -83,7 +83,23 @@ func setupSessionStore(router *gin.Engine) {
 	router.Use(sessions.Sessions("hns_session", store))
 }
 
-// SetupWebRouter sets up the web routes
+// GenerateHostnamePage displays the hostname generator form
+func (h *WebHandler) GenerateHostnamePage(c *gin.Context) {
+	// Get templates
+	ctx := c.Request.Context()
+	templates, _, err := h.templateRepo.List(ctx, 100, 0)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get templates")
+		setAlert(c, "danger", "Error retrieving templates")
+	}
+
+	h.renderTemplate(c, "hostname_generate", gin.H{
+		"Title":     "Generate Hostname",
+		"Templates": templates,
+	})
+}
+
+// setupWebRouter sets up template loading correctly
 func SetupWebRouter(
 	router *gin.Engine,
 	webHandler *WebHandler,
@@ -120,12 +136,13 @@ func SetupWebRouter(
 		"getCurrentYear": getCurrentYear,
 	})
 
-	// Load templates - FIXED PATH
-	templatesPath := filepath.Join("internal", "web", "templates", "**", "*")
+	// Load templates - The key is to make sure the Gin template engine
+	// can find and properly use the templates
+	templatesPath := filepath.Join("internal", "web", "templates", "**", "*.html")
 	log.Info().Str("templates_path", templatesPath).Msg("Loading templates")
 	router.LoadHTMLGlob(templatesPath)
 
-	// Static files path - FIXED PATH
+	// Static files path
 	staticPath := filepath.Join("internal", "web", "static")
 	log.Info().Str("static_path", staticPath).Msg("Setting up static files")
 	router.Static("/static", staticPath)
@@ -370,11 +387,15 @@ func setAlert(c *gin.Context, alertType, message string) {
 }
 
 // renderTemplate is a helper function to render templates with common data
+// renderTemplate is a helper function to render templates with common data
 func (h *WebHandler) renderTemplate(c *gin.Context, name string, data gin.H) {
 	// Add common template data
 	if data == nil {
 		data = gin.H{}
 	}
+
+	// Set which page is being rendered to control which view is displayed
+	data["Page"] = name
 
 	// Add user information if logged in
 	loggedIn, _ := c.Get("loggedIn")
@@ -400,20 +421,14 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data gin.H) {
 	// Add current year for footer
 	data["CurrentYear"] = time.Now().Year()
 
-	// Check if name already includes the directory prefix
-	if !strings.Contains(name, "/") {
-		// Prefix with pages/ directory if not already included
-		name = "pages/" + name
-	}
+	// Render template with the base template
+	log.Info().Str("template", name).Msg("Rendering template with base layout")
 
-	// Check if name already includes extension
-	if !strings.HasSuffix(name, ".html") {
-		name = name + ".html"
+	// Use the base template for rendering, passing our data
+	if err := c.HTML(http.StatusOK, "base", data); err != nil {
+		log.Error().Err(err).Str("template", name).Msg("Failed to render template")
+		c.String(http.StatusInternalServerError, "Template rendering error: %v", err)
 	}
-
-	// Render template
-	log.Info().Str("template", name).Msg("Rendering template")
-	c.HTML(http.StatusOK, name, data)
 }
 
 // getPaginationData prepares pagination data for templates
@@ -683,7 +698,7 @@ func (h *WebHandler) HostnameList(c *gin.Context) {
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get hostnames")
 		setAlert(c, "danger", "Error retrieving hostnames")
-		h.renderTemplate(c, "hostname_management", gin.H{
+		h.renderTemplate(c, "hostname_list", gin.H{
 			"Title": "Hostname Management",
 		})
 		return
@@ -750,7 +765,7 @@ func (h *WebHandler) HostnameList(c *gin.Context) {
 		templateData[k] = v
 	}
 
-	h.renderTemplate(c, "hostname_management", templateData)
+	h.renderTemplate(c, "hostname_list", templateData)
 }
 
 // HostnameDetail displays the details of a single hostname
@@ -810,7 +825,7 @@ func (h *WebHandler) GenerateHostnamePage(c *gin.Context) {
 		setAlert(c, "danger", "Error retrieving templates")
 	}
 
-	h.renderTemplate(c, "generator", gin.H{
+	h.renderTemplate(c, "hostname_generate", gin.H{
 		"Title":     "Generate Hostname",
 		"Templates": templates,
 	})
