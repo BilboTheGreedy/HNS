@@ -1,4 +1,4 @@
-{{ define "base" }}
+{{ define "base.html" }}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,6 +82,7 @@
         </div>
         {{ end }}
 
+        <!-- Dynamic Content Section -->
         {{ block "content" . }}{{ end }}
     </div>
 

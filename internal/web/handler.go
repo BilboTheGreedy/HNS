@@ -83,22 +83,6 @@ func setupSessionStore(router *gin.Engine) {
 	router.Use(sessions.Sessions("hns_session", store))
 }
 
-// GenerateHostnamePage displays the hostname generator form
-func (h *WebHandler) GenerateHostnamePage(c *gin.Context) {
-	// Get templates
-	ctx := c.Request.Context()
-	templates, _, err := h.templateRepo.List(ctx, 100, 0)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to get templates")
-		setAlert(c, "danger", "Error retrieving templates")
-	}
-
-	h.renderTemplate(c, "hostname_generate", gin.H{
-		"Title":     "Generate Hostname",
-		"Templates": templates,
-	})
-}
-
 // setupWebRouter sets up template loading correctly
 func SetupWebRouter(
 	router *gin.Engine,
@@ -136,17 +120,17 @@ func SetupWebRouter(
 		"getCurrentYear": getCurrentYear,
 	})
 
-	// Load templates - The key is to make sure the Gin template engine
-	// can find and properly use the templates
-	templatesPath := filepath.Join("internal", "web", "templates", "**", "*.html")
+	// Load templates using existing structure
+	templatesPath := filepath.Join("internal", "web", "templates")
 	log.Info().Str("templates_path", templatesPath).Msg("Loading templates")
-	router.LoadHTMLGlob(templatesPath)
+
+	// Load templates without requiring .tmpl extension
+	router.LoadHTMLGlob(filepath.Join(templatesPath, "**", "*.html"))
 
 	// Static files path
 	staticPath := filepath.Join("internal", "web", "static")
 	log.Info().Str("static_path", staticPath).Msg("Setting up static files")
 	router.Static("/static", staticPath)
-
 	// Public routes
 	router.GET("/", webHandler.Home)
 	router.GET("/login", webHandler.LoginPage)
@@ -386,16 +370,12 @@ func setAlert(c *gin.Context, alertType, message string) {
 	session.Save()
 }
 
-// renderTemplate is a helper function to render templates with common data
-// renderTemplate is a helper function to render templates with common data
+// Update the renderTemplate function to work with existing templates
 func (h *WebHandler) renderTemplate(c *gin.Context, name string, data gin.H) {
 	// Add common template data
 	if data == nil {
 		data = gin.H{}
 	}
-
-	// Set which page is being rendered to control which view is displayed
-	data["Page"] = name
 
 	// Add user information if logged in
 	loggedIn, _ := c.Get("loggedIn")
@@ -421,14 +401,11 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data gin.H) {
 	// Add current year for footer
 	data["CurrentYear"] = time.Now().Year()
 
-	// Render template with the base template
-	log.Info().Str("template", name).Msg("Rendering template with base layout")
+	// Simple direct template rendering - no error handling
+	templatePath := "pages/" + name + ".html"
+	log.Info().Str("template", templatePath).Msg("Rendering template")
 
-	// Use the base template for rendering, passing our data
-	if err := c.HTML(http.StatusOK, "base", data); err != nil {
-		log.Error().Err(err).Str("template", name).Msg("Failed to render template")
-		c.String(http.StatusInternalServerError, "Template rendering error: %v", err)
-	}
+	c.HTML(http.StatusOK, templatePath, data)
 }
 
 // getPaginationData prepares pagination data for templates
@@ -815,7 +792,6 @@ func (h *WebHandler) HostnameDetail(c *gin.Context) {
 	})
 }
 
-// GenerateHostnamePage displays the hostname generator form
 func (h *WebHandler) GenerateHostnamePage(c *gin.Context) {
 	// Get templates
 	ctx := c.Request.Context()
