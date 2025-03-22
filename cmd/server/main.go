@@ -69,7 +69,9 @@ func main() {
 	dnsChecker := dns.NewDNSChecker(cfg.DNS)
 
 	// Setup Gin router
-	router := gin.Default()
+	gin.SetMode(gin.ReleaseMode) // Use ReleaseMode for production
+	router := gin.New()
+	router.Use(gin.Recovery())
 
 	// Setup API routes
 	api.SetupRouter(
@@ -83,26 +85,25 @@ func main() {
 		dnsChecker,
 	)
 
-	// Create web handler and setup web routes
-	webHandler := web.NewWebHandler(
+	// Setup web routes (using our refactored web package)
+	web.SetupWebRouter(
+		router,
+		userRepo,
 		templateRepo,
 		hostRepo,
-		userRepo,
 		jwtManager,
 		genService,
 		resService,
 		dnsChecker,
 		seqService,
 	)
-	web.SetupWebRouter(router, webHandler)
 
-	// Create server
+	// Start server in a goroutine
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler: router,
 	}
 
-	// Start server in a goroutine
 	go func() {
 		log.Info().Msgf("Starting server on port %d", cfg.Server.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

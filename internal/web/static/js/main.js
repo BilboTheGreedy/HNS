@@ -1,4 +1,4 @@
-// Main JavaScript for HNS application
+// Main JavaScript functions for HNS application
 
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize tooltips
@@ -13,127 +13,82 @@ document.addEventListener('DOMContentLoaded', function() {
         [...popoverTriggerList].map(el => new bootstrap.Popover(el));
     }
 
-    // Copy to clipboard functionality
-    document.querySelectorAll('.copy-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const targetId = this.getAttribute('data-copy-target');
-            const targetElement = document.getElementById(targetId);
-            
-            if (targetElement) {
-                const textToCopy = targetElement.textContent.trim();
-                
-                // Use Clipboard API if available
-                if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(textToCopy).then(() => {
-                        showCopySuccess(this);
-                    }).catch(err => {
-                        console.error('Failed to copy text: ', err);
-                    });
-                } else {
-                    // Fallback method for older browsers
-                    const textarea = document.createElement('textarea');
-                    textarea.value = textToCopy;
-                    textarea.style.position = 'fixed';  // Avoid scrolling to bottom
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    
-                    try {
-                        document.execCommand('copy');
-                        showCopySuccess(this);
-                    } catch (err) {
-                        console.error('Failed to copy text: ', err);
-                    } finally {
-                        document.body.removeChild(textarea);
-                    }
-                }
-            }
-        });
-    });
-
-    // Helper function to show copy success
-    function showCopySuccess(button) {
-        const originalContent = button.innerHTML;
-        button.innerHTML = '<i class="fas fa-check"></i> Copied!';
-        button.disabled = true;
-        
-        setTimeout(() => {
-            button.innerHTML = originalContent;
-            button.disabled = false;
-        }, 2000);
-    }
-
-    // Handle authentication token storage
-    // When the user successfully logs in, store the JWT token
-    const loginForm = document.getElementById('login-form');
-    if (loginForm) {
-        loginForm.addEventListener('submit', function(e) {
-            // Form submission is handled by the server
-            // This is just for demonstration purposes
-            
-            // Store token from API response (normally done after successful login)
-            // localStorage.setItem('auth_token', response.token);
-        });
-    }
-
-    // Add token to API requests
-    function getAuthToken() {
-        return localStorage.getItem('auth_token');
-    }
-
-    // Example API request with authentication
-    async function apiRequest(url, method = 'GET', data = null) {
-        const headers = {
-            'Content-Type': 'application/json'
-        };
-        
-        const token = getAuthToken();
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const options = {
-            method,
-            headers
-        };
-        
-        if (data && (method === 'POST' || method === 'PUT')) {
-            options.body = JSON.stringify(data);
-        }
-        
-        try {
-            const response = await fetch(url, options);
-            const result = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(result.error || 'An error occurred');
-            }
-            
-            return result;
-        } catch (error) {
-            console.error('API request error:', error);
-            throw error;
-        }
-    }
-
-    // Expose API functions globally
-    window.hnsApi = {
-        getTemplates: () => apiRequest('/api/templates'),
-        getTemplate: (id) => apiRequest(`/api/templates/${id}`),
-        getHostnames: (filters) => {
-            const queryParams = new URLSearchParams(filters).toString();
-            return apiRequest(`/api/hostnames?${queryParams}`);
-        },
-        generateHostname: (data) => apiRequest('/api/hostnames/generate', 'POST', data),
-        reserveHostname: (data) => apiRequest('/api/hostnames/reserve', 'POST', data),
-        checkDns: (hostname) => apiRequest(`/api/dns/check/${hostname}`)
-    };
-
-    // Template dynamic form handlers
+    // Initialize template-related forms
     initTemplateForms();
     
-    // Hostname generator and reservation form handlers
+    // Initialize hostname forms
     initHostnameForms();
+    
+    // Auto-dismiss alerts after 5 seconds
+    setTimeout(function() {
+        const alerts = document.querySelectorAll('.alert');
+        alerts.forEach(function(alert) {
+            // Create a new bootstrap alert and close it
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        });
+    }, 5000);
 });
+
+// Copy text to clipboard
+function copyToClipboard(text, successMsg = "Copied to clipboard!") {
+    // Use the clipboard API if available
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text)
+            .then(() => showCopySuccess(successMsg))
+            .catch(() => showCopyError());
+    } else {
+        // Fallback method
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        
+        // Make the textarea invisible
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            document.execCommand('copy') ? 
+                showCopySuccess(successMsg) : showCopyError();
+        } catch (err) {
+            showCopyError();
+        }
+        
+        document.body.removeChild(textArea);
+    }
+}
+
+// Show copy success message
+function showCopySuccess(message = "Copied to clipboard!") {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-4 shadow';
+    alertDiv.style.zIndex = '9999';
+    alertDiv.innerHTML = `<i class="fas fa-check-circle me-2"></i> ${message}`;
+    document.body.appendChild(alertDiv);
+    
+    // Remove the alert after 2 seconds
+    setTimeout(function() {
+        alertDiv.remove();
+    }, 2000);
+}
+
+// Show copy error message
+function showCopyError() {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-danger position-fixed top-0 start-50 translate-middle-x mt-4 shadow';
+    alertDiv.style.zIndex = '9999';
+    alertDiv.innerHTML = '<i class="fas fa-times-circle me-2"></i> Failed to copy to clipboard';
+    document.body.appendChild(alertDiv);
+    
+    // Remove the alert after 2 seconds
+    setTimeout(function() {
+        alertDiv.remove();
+    }, 2000);
+}
 
 // Initialize template-related forms
 function initTemplateForms() {
@@ -146,63 +101,68 @@ function initTemplateForms() {
             groupCounter++;
             
             const newGroup = document.createElement('div');
-            newGroup.className = 'template-group';
+            newGroup.className = 'template-group card mb-3';
             newGroup.innerHTML = `
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="group_name_${groupCounter}" class="form-label form-required">Group Name</label>
-                        <input type="text" class="form-control" id="group_name_${groupCounter}" 
-                            name="groups[${groupCounter-1}][name]" required>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">Group ${groupCounter}</h5>
+                        <button type="button" class="btn btn-sm btn-outline-danger remove-group-btn">
+                            <i class="fas fa-trash"></i> Remove
+                        </button>
                     </div>
-                    <div class="col-md-3 mb-3">
-                        <label for="group_length_${groupCounter}" class="form-label form-required">Length</label>
-                        <input type="number" class="form-control" id="group_length_${groupCounter}" 
-                            name="groups[${groupCounter-1}][length]" min="1" value="2" required>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="group_name_${groupCounter}" class="form-label form-required">Group Name</label>
+                            <input type="text" class="form-control" id="group_name_${groupCounter}" 
+                                name="groups[${groupCounter-1}][name]" required>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="group_length_${groupCounter}" class="form-label form-required">Length</label>
+                            <input type="number" class="form-control" id="group_length_${groupCounter}" 
+                                name="groups[${groupCounter-1}][length]" min="1" value="2" required>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="group_required_${groupCounter}" class="form-label">Required</label>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="group_required_${groupCounter}" 
+                                    name="groups[${groupCounter-1}][is_required]" checked>
+                                <label class="form-check-label" for="group_required_${groupCounter}">
+                                    Required
+                                </label>
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-3 mb-3">
-                        <label for="group_required_${groupCounter}" class="form-label">Required</label>
-                        <div class="form-check mt-2">
-                            <input class="form-check-input" type="checkbox" id="group_required_${groupCounter}" 
-                                name="groups[${groupCounter-1}][is_required]" checked>
-                            <label class="form-check-label" for="group_required_${groupCounter}">
-                                Required
-                            </label>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="group_validation_type_${groupCounter}" class="form-label form-required">Validation Type</label>
+                            <select class="form-select validation-type-select" id="group_validation_type_${groupCounter}" 
+                                name="groups[${groupCounter-1}][validation_type]" required>
+                                <option value="fixed">Fixed Value</option>
+                                <option value="list" selected>List of Values</option>
+                                <option value="regex">Regular Expression</option>
+                                <option value="sequence">Sequence Number</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3 validation-value-container">
+                            <label for="group_validation_value_${groupCounter}" class="form-label validation-value-label form-required">Value</label>
+                            <input type="text" class="form-control" id="group_validation_value_${groupCounter}" 
+                                name="groups[${groupCounter-1}][validation_value]" placeholder="e.g. US,EU,AP" required>
+                            <small class="validation-info text-muted">
+                                For list values, enter comma-separated options (e.g., US,EU,AP)
+                            </small>
                         </div>
                     </div>
                 </div>
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="group_validation_type_${groupCounter}" class="form-label form-required">Validation Type</label>
-                        <select class="form-select validation-type-select" id="group_validation_type_${groupCounter}" 
-                            name="groups[${groupCounter-1}][validation_type]" required>
-                            <option value="fixed">Fixed Value</option>
-                            <option value="list" selected>List of Values</option>
-                            <option value="regex">Regular Expression</option>
-                            <option value="sequence">Sequence Number</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6 mb-3 validation-value-container">
-                        <label for="group_validation_value_${groupCounter}" class="form-label validation-value-label form-required">Value</label>
-                        <input type="text" class="form-control" id="group_validation_value_${groupCounter}" 
-                            name="groups[${groupCounter-1}][validation_value]" required>
-                        <small class="validation-info text-muted">
-                            For list values, enter comma-separated options (e.g., US,EU,AP)
-                        </small>
-                    </div>
-                </div>
-                <button type="button" class="btn btn-sm btn-outline-danger remove-group-btn">
-                    <i class="fas fa-trash"></i> Remove Group
-                </button>
-                <hr>
             `;
             
             document.getElementById('template-groups-container').appendChild(newGroup);
             
-            // Add event listener to new elements
+            // Add event listener to new remove button
             newGroup.querySelector('.remove-group-btn').addEventListener('click', function() {
                 newGroup.remove();
             });
             
+            // Add event listener to new validation type select
             newGroup.querySelector('.validation-type-select').addEventListener('change', handleValidationTypeChange);
         });
     }
@@ -240,12 +200,15 @@ function handleValidationTypeChange() {
         if (validationType === 'fixed') {
             label.textContent = 'Fixed Value';
             info.textContent = 'Enter the exact value for this group.';
+            input.placeholder = 'e.g. PROD';
         } else if (validationType === 'list') {
             label.textContent = 'Allowed Values';
             info.textContent = 'Enter comma-separated list of allowed values (e.g., US,UK,DE,FR).';
+            input.placeholder = 'e.g. US,EU,AP';
         } else if (validationType === 'regex') {
             label.textContent = 'Regex Pattern';
             info.textContent = 'Enter a valid regular expression pattern.';
+            input.placeholder = 'e.g. [A-Z]{2}';
         }
     }
 }
@@ -264,10 +227,16 @@ function initHostnameForms() {
             }
             
             // Show loading indicator
-            document.getElementById('template-params-container').innerHTML = '<div class="loader"></div>';
+            document.getElementById('template-params-container').innerHTML = '<div class="text-center my-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading template parameters...</p></div>';
             
-            // Fetch template details
-            window.hnsApi.getTemplate(templateId)
+            // Fetch template details via AJAX
+            fetch(`/api/templates/${templateId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
                 .then(template => {
                     let paramsHtml = '';
                     
@@ -325,110 +294,11 @@ function initHostnameForms() {
                     console.error('Error fetching template:', error);
                     document.getElementById('template-params-container').innerHTML = `
                         <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle me-2"></i>
                             Error loading template parameters. Please try again.
                         </div>
                     `;
                 });
-        });
-    }
-    
-    // Hostname generator form
-    const generatorForm = document.getElementById('hostname-generator-form');
-    if (generatorForm) {
-        generatorForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const templateId = document.getElementById('template_id').value;
-            if (!templateId) {
-                alert('Please select a template');
-                return;
-            }
-            
-            // Collect parameters
-            const params = {};
-            document.querySelectorAll('.template-param').forEach(input => {
-                const paramName = input.id.replace('param_', '');
-                params[paramName] = input.value;
-            });
-            
-            // Show loading indicator
-            document.getElementById('generator-result').innerHTML = '<div class="loader"></div>';
-            
-            // Check if DNS check is enabled
-            const checkDns = document.getElementById('check_dns')?.checked || false;
-            
-            // Generate hostname
-            window.hnsApi.generateHostname({
-                template_id: parseInt(templateId),
-                params: params,
-                check_dns: checkDns
-            })
-            .then(data => {
-                // Format result in a card
-                let resultHtml = `
-                    <div class="card">
-                        <div class="card-header">Generated Hostname</div>
-                        <div class="card-body">
-                            <h3 class="text-center mb-3">${data.hostname}</h3>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <p><strong>Template:</strong> ${document.querySelector('#template_id option:checked').textContent}</p>
-                                    <p><strong>Sequence Number:</strong> <span class="sequence-num">${data.sequence_num}</span></p>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="d-grid gap-2">
-                                        <button id="reserve-btn" class="btn btn-primary">
-                                            <i class="fas fa-bookmark"></i> Reserve Hostname
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-                // Add DNS check results if available
-                if (data.dns_check) {
-                    const dnsStatusClass = data.dns_check.exists ? 'text-warning' : 'text-success';
-                    const dnsStatusIcon = data.dns_check.exists ? 'fa-exclamation-triangle' : 'fa-check-circle';
-                    const dnsStatusText = data.dns_check.exists ? 'Hostname exists in DNS' : 'Hostname available in DNS';
-                    
-                    resultHtml += `
-                        <div class="card mt-3">
-                            <div class="card-header">DNS Check Result</div>
-                            <div class="card-body text-center">
-                                <i class="fas ${dnsStatusIcon} fa-3x ${dnsStatusClass} mb-2"></i>
-                                <h4 class="${dnsStatusClass}">${dnsStatusText}</h4>
-                                ${data.dns_check.exists ? `<p>IP: ${data.dns_check.ip_address || 'N/A'}</p>` : ''}
-                            </div>
-                        </div>
-                    `;
-                }
-                
-                document.getElementById('generator-result').innerHTML = resultHtml;
-                
-                // Add event listener to reserve button
-                document.getElementById('reserve-btn').addEventListener('click', function() {
-                    window.hnsApi.reserveHostname({
-                        template_id: parseInt(templateId),
-                        params: params
-                    })
-                    .then(reserveData => {
-                        window.location.href = `/hostnames/${reserveData.id}`;
-                    })
-                    .catch(err => {
-                        alert('Failed to reserve hostname: ' + err.message);
-                    });
-                });
-            })
-            .catch(error => {
-                console.error('Error generating hostname:', error);
-                document.getElementById('generator-result').innerHTML = `
-                    <div class="alert alert-danger">
-                        Error generating hostname: ${error.message}
-                    </div>
-                `;
-            });
         });
     }
 }
