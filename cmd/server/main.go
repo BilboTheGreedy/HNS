@@ -14,6 +14,8 @@ import (
 	"github.com/bilbothegreedy/HNS/internal/config"
 	"github.com/bilbothegreedy/HNS/internal/db/migration"
 	"github.com/bilbothegreedy/HNS/internal/dns"
+	"github.com/bilbothegreedy/HNS/internal/models"
+	"github.com/bilbothegreedy/HNS/internal/repository"
 	"github.com/bilbothegreedy/HNS/internal/repository/postgres"
 	"github.com/bilbothegreedy/HNS/internal/service"
 	"github.com/bilbothegreedy/HNS/internal/web"
@@ -21,7 +23,49 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/bcrypt"
 )
+
+func ensureAdminUserExists(userRepo repository.UserRepository) {
+	ctx := context.Background()
+
+	// Try to get the admin user
+	user, err := userRepo.GetByUsername(ctx, "admin")
+	if err == nil && user != nil {
+		log.Info().Msg("Admin user already exists")
+		return
+	}
+
+	// Create admin user
+	log.Info().Msg("Creating default admin user")
+
+	// Hash the password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to hash admin password")
+		return
+	}
+
+	// Create the user
+	adminUser := &models.User{
+		Username:     "admin",
+		Email:        "admin@example.com",
+		PasswordHash: string(hashedPassword),
+		FirstName:    "Admin",
+		LastName:     "User",
+		Role:         models.RoleAdmin,
+		IsActive:     true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := userRepo.Create(ctx, adminUser); err != nil {
+		log.Error().Err(err).Msg("Failed to create admin user - may already exist")
+		return
+	}
+
+	log.Info().Msg("Default admin user created successfully")
+}
 
 func main() {
 	// Initialize logger
@@ -55,7 +99,7 @@ func main() {
 	hostRepo := postgres.NewHostnameRepository(db)
 	templateRepo := postgres.NewTemplateRepository(db)
 	userRepo := postgres.NewUserRepository(db)
-
+	ensureAdminUserExists(userRepo)
 	// Create services
 	genService := service.NewGeneratorService(templateRepo)
 	resService := service.NewReservationService(hostRepo, templateRepo)
@@ -67,7 +111,6 @@ func main() {
 
 	// Create DNS checker
 	dnsChecker := dns.NewDNSChecker(cfg.DNS)
-
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode) // Use ReleaseMode for production
 	router := gin.New()

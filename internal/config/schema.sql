@@ -1,5 +1,5 @@
 -- Create database
-CREATE DATABASE servername;
+CREATE DATABASE hns;
 
 -- Connect to database
 \c servername;
