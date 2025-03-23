@@ -184,44 +184,50 @@ func LoadTemplates(router *gin.Engine, basePath string) {
 	// Log template directory for debugging
 	log.Info().Str("templates_dir", templatesDir).Msg("Templates directory")
 
-	// Create a new template with functions
-	tmpl := template.New("").Funcs(CreateTemplateHelpers())
+	// Load all templates
+	basePattern := filepath.Join(templatesDir, "base", "*.html")
+	partialsPattern := filepath.Join(templatesDir, "partials", "*.html")
+	pagesPattern := filepath.Join(templatesDir, "pages", "*.html")
 
-	// Parse base templates first
-	baseFiles, err := filepath.Glob(filepath.Join(templatesDir, "base", "*.html"))
+	// Log the patterns for debugging
+	log.Info().
+		Str("base_pattern", basePattern).
+		Str("partials_pattern", partialsPattern).
+		Str("pages_pattern", pagesPattern).
+		Msg("Template patterns")
+
+	// Find all template files
+	baseFiles, err := filepath.Glob(basePattern)
 	if err != nil {
 		log.Error().Err(err).Msg("Error finding base template files")
-	} else {
-		for _, file := range baseFiles {
-			log.Info().Str("file", file).Msg("Loading base template")
-		}
-		template.Must(tmpl.ParseFiles(baseFiles...))
 	}
 
-	// Parse partial templates
-	partialFiles, err := filepath.Glob(filepath.Join(templatesDir, "partials", "*.html"))
+	partialFiles, err := filepath.Glob(partialsPattern)
 	if err != nil {
 		log.Error().Err(err).Msg("Error finding partial template files")
-	} else {
-		for _, file := range partialFiles {
-			log.Info().Str("file", file).Msg("Loading partial template")
-		}
-		template.Must(tmpl.ParseFiles(partialFiles...))
 	}
 
-	// Parse page templates
-	pageFiles, err := filepath.Glob(filepath.Join(templatesDir, "pages", "*.html"))
+	pageFiles, err := filepath.Glob(pagesPattern)
 	if err != nil {
 		log.Error().Err(err).Msg("Error finding page template files")
-	} else {
-		for _, file := range pageFiles {
-			log.Info().Str("file", file).Msg("Loading page template")
-		}
-		template.Must(tmpl.ParseFiles(pageFiles...))
 	}
 
+	// Combine all files
+	allFiles := append(baseFiles, partialFiles...)
+	allFiles = append(allFiles, pageFiles...)
+
+	// Log all files for debugging
+	for _, file := range allFiles {
+		log.Info().Str("file", file).Msg("Found template file")
+	}
+
+	// Load templates
+	templ := template.Must(template.New("").Funcs(CreateTemplateHelpers()).ParseFiles(allFiles...))
+
 	// Set HTML template for Gin
-	router.SetHTMLTemplate(tmpl)
+	router.SetHTMLTemplate(templ)
+
+	log.Info().Int("total_templates", len(allFiles)).Msg("Templates loaded successfully")
 }
 
 // GetAlert extracts and clears any alert message from the session

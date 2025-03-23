@@ -43,6 +43,7 @@ func SetupRouter(
 			templates.GET("", apiHandler.GetTemplates)
 			templates.GET("/:id", apiHandler.GetTemplate)
 			templates.POST("", AuthMiddleware(jwtManager, apiKeyManager, "admin"), apiHandler.CreateTemplate)
+			templates.DELETE("/:id", AuthMiddleware(jwtManager, apiKeyManager, "admin"), apiHandler.DeleteTemplate)
 		}
 
 		// Hostname routes

@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/bilbothegreedy/HNS/internal/models"
 	"github.com/bilbothegreedy/HNS/internal/repository"
+	"github.com/bilbothegreedy/HNS/internal/web/helpers"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -29,8 +30,8 @@ func NewDashboardHandler(
 // Dashboard displays the dashboard page
 func (h *DashboardHandler) Dashboard(c *gin.Context) {
 	// If not logged in, redirect to login page
-	loggedIn, exists := c.Get("loggedIn")
-	if !exists || !loggedIn.(bool) {
+	loggedIn := helpers.IsAuthenticated(c)
+	if !loggedIn {
 		c.Redirect(302, "/login")
 		return
 	}
@@ -90,8 +91,8 @@ func (h *DashboardHandler) Dashboard(c *gin.Context) {
 // Home redirects to the dashboard
 func (h *DashboardHandler) Home(c *gin.Context) {
 	// If not logged in, redirect to login page
-	loggedIn, exists := c.Get("loggedIn")
-	if !exists || !loggedIn.(bool) {
+	loggedIn := helpers.IsAuthenticated(c)
+	if !loggedIn {
 		c.Redirect(302, "/login")
 		return
 	}

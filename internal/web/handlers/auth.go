@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/bilbothegreedy/HNS/internal/auth"
 	"github.com/bilbothegreedy/HNS/internal/models"
 	"github.com/bilbothegreedy/HNS/internal/repository"
 	"github.com/bilbothegreedy/HNS/internal/web/helpers"
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
@@ -15,6 +15,7 @@ import (
 
 // AuthHandler handles authentication-related requests
 type AuthHandler struct {
+	BaseHandler
 	userRepo   repository.UserRepository
 	jwtManager *auth.JWTManager
 }
@@ -22,25 +23,26 @@ type AuthHandler struct {
 // NewAuthHandler creates a new AuthHandler
 func NewAuthHandler(userRepo repository.UserRepository, jwtManager *auth.JWTManager) *AuthHandler {
 	return &AuthHandler{
-		userRepo:   userRepo,
-		jwtManager: jwtManager,
+		BaseHandler: BaseHandler{},
+		userRepo:    userRepo,
+		jwtManager:  jwtManager,
 	}
 }
 
 // LoginPage renders the login page
 func (h *AuthHandler) LoginPage(c *gin.Context) {
-	// If already logged in, redirect to home
-	session := sessions.Default(c)
-	if session.Get(helpers.SessionKeyUserID) != nil {
-		c.Redirect(http.StatusFound, "/hostnames")
+	// If already logged in, redirect to dashboard
+	loggedIn := helpers.IsAuthenticated(c)
+	if loggedIn {
+		c.Redirect(http.StatusFound, "/dashboard")
 		return
 	}
 
-	// Render login page
+	// Render login page directly
 	c.HTML(http.StatusOK, "pages/login.html", gin.H{
 		"Title":       "Login",
 		"Alert":       helpers.GetAlert(c),
-		"CurrentYear": helpers.GetCurrentYear(),
+		"CurrentYear": time.Now().Year(),
 	})
 }
 
@@ -88,19 +90,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		}
 	}
 
-	// Set user session
-	session := sessions.Default(c)
-	session.Set(helpers.SessionKeyUserID, user.ID)
-	session.Set(helpers.SessionKeyUsername, user.Username)
-	session.Set(helpers.SessionKeyIsAdmin, user.Role == models.RoleAdmin)
-	session.Set(helpers.SessionKeyLoggedIn, true)
-
-	// Set token if generated
-	if token != "" {
-		session.Set(helpers.SessionKeyToken, token)
-	}
-
-	err = session.Save()
+	// Set user session using the helper function
+	err = helpers.SetUserSession(c, user, token)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to save session")
 		helpers.SetAlert(c, "danger", "Login failed due to session error")
@@ -115,16 +106,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		// Continue regardless
 	}
 
-	log.Info().Str("username", username).Msg("Session saved, redirecting to hostnames page")
-	c.Redirect(http.StatusFound, "/hostnames")
+	log.Info().Str("username", username).Msg("Session saved, redirecting to dashboard")
+	c.Redirect(http.StatusFound, "/dashboard")
 }
 
 // RegisterPage renders the registration page
 func (h *AuthHandler) RegisterPage(c *gin.Context) {
 	// If already logged in, redirect to home
-	session := sessions.Default(c)
-	if session.Get(helpers.SessionKeyUserID) != nil {
-		c.Redirect(http.StatusFound, "/hostnames")
+	loggedIn := helpers.IsAuthenticated(c)
+	if loggedIn {
+		c.Redirect(http.StatusFound, "/dashboard")
 		return
 	}
 
@@ -132,7 +123,7 @@ func (h *AuthHandler) RegisterPage(c *gin.Context) {
 	c.HTML(http.StatusOK, "pages/register.html", gin.H{
 		"Title":       "Register",
 		"Alert":       helpers.GetAlert(c),
-		"CurrentYear": helpers.GetCurrentYear(),
+		"CurrentYear": time.Now().Year(),
 	})
 }
 
@@ -187,6 +178,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		LastName:     lastName,
 		Role:         models.RoleUser,
 		IsActive:     true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	// Save user
@@ -205,98 +198,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 // Logout handles user logout
 func (h *AuthHandler) Logout(c *gin.Context) {
 	// Clear session
-	session := sessions.Default(c)
-	session.Clear()
-	session.Save()
+	helpers.ClearSession(c)
 
 	// Redirect to login
-	c.Redirect(http.StatusFound, "/login")
-}
-
-// ChangePassword handles password change requests
-func (h *AuthHandler) ChangePassword(c *gin.Context) {
-	// Get user ID from context
-	userID, exists := c.Get("userID")
-	if !exists {
-		helpers.SetAlert(c, "danger", "User not authenticated")
-		c.Redirect(http.StatusFound, "/login")
-		return
-	}
-
-	// Get current user
-	user, err := h.userRepo.GetByID(c.Request.Context(), userID.(int64))
-	if err != nil {
-		helpers.SetAlert(c, "danger", "User not found")
-		c.Redirect(http.StatusFound, "/profile")
-		return
-	}
-
-	// Get form data
-	currentPassword := c.PostForm("current_password")
-	newPassword := c.PostForm("new_password")
-	confirmPassword := c.PostForm("confirm_password")
-
-	// Verify current password
-	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(currentPassword))
-	if err != nil {
-		helpers.SetAlert(c, "danger", "Current password is incorrect")
-		c.Redirect(http.StatusFound, "/profile")
-		return
-	}
-
-	// Validate passwords match
-	if newPassword != confirmPassword {
-		helpers.SetAlert(c, "danger", "New passwords do not match")
-		c.Redirect(http.StatusFound, "/profile")
-		return
-	}
-
-	// Hash new password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to hash password")
-		helpers.SetAlert(c, "danger", "Failed to update password")
-		c.Redirect(http.StatusFound, "/profile")
-		return
-	}
-
-	// Update password
-	user.PasswordHash = string(hashedPassword)
-	if err := h.userRepo.Update(c.Request.Context(), user); err != nil {
-		log.Error().Err(err).Msg("Failed to update password")
-		helpers.SetAlert(c, "danger", "Failed to update password: "+err.Error())
-		c.Redirect(http.StatusFound, "/profile")
-		return
-	}
-
-	// Success
-	helpers.SetAlert(c, "success", "Password updated successfully")
-	c.Redirect(http.StatusFound, "/profile")
-}
-
-// ForgotPassword handles password reset requests
-func (h *AuthHandler) ForgotPassword(c *gin.Context) {
-	// This is a placeholder for a real implementation
-	// In a real application, this would send a reset email
-
-	email := c.PostForm("email")
-	if email == "" {
-		helpers.SetAlert(c, "danger", "Email is required")
-		c.Redirect(http.StatusFound, "/forgot-password")
-		return
-	}
-
-	// Check if user exists
-	user, err := h.userRepo.GetByEmail(c.Request.Context(), email)
-	if err != nil || user == nil {
-		// Don't reveal if email exists for security
-		helpers.SetAlert(c, "success", "If your email is registered, you will receive a password reset link")
-		c.Redirect(http.StatusFound, "/login")
-		return
-	}
-
-	// In a real implementation, generate a token and send email
-	// For now, just show a success message
-	helpers.SetAlert(c, "success", "If your email is registered, you will receive a password reset link")
 	c.Redirect(http.StatusFound, "/login")
 }

@@ -260,3 +260,29 @@ func (s *GeneratorService) CreateTemplate(ctx context.Context, req *models.Templ
 	// Fetch the complete template with groups
 	return s.templateRepo.GetByID(ctx, template.ID)
 }
+
+// DeleteTemplate deletes a template by ID
+func (s *GeneratorService) DeleteTemplate(ctx context.Context, id int64) error {
+	// Check if template exists
+	template, err := s.templateRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get template: %w", err)
+	}
+
+	// Check if template is in use by any hostnames
+	// This would require a method to check if any hostnames are using this template
+	// For now, we'll allow deletion even if hostnames are using the template
+	// In a production system, you might want to add this check
+
+	// Delete the template
+	if err := s.templateRepo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete template: %w", err)
+	}
+
+	log.Info().
+		Int64("id", id).
+		Str("name", template.Name).
+		Msg("Template deleted successfully")
+
+	return nil
+}

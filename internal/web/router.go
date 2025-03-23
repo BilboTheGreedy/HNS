@@ -3,6 +3,7 @@ package web
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/bilbothegreedy/HNS/internal/auth"
 	"github.com/bilbothegreedy/HNS/internal/dns"
@@ -41,9 +42,41 @@ func SetupWebRouter(
 	staticPath := filepath.Join(wd, "internal", "web", "static")
 	log.Info().Str("static_path", staticPath).Msg("Setting up static files")
 
-	// Check if static path exists
+	// Create static directory if it doesn't exist
 	if _, err := os.Stat(staticPath); os.IsNotExist(err) {
-		log.Error().Str("path", staticPath).Msg("Static files directory doesn't exist")
+		log.Info().Str("path", staticPath).Msg("Creating static files directory")
+		if err := os.MkdirAll(staticPath, 0755); err != nil {
+			log.Error().Err(err).Str("path", staticPath).Msg("Failed to create static directory")
+		}
+
+		// Create CSS directory
+		cssPath := filepath.Join(staticPath, "css")
+		if err := os.MkdirAll(cssPath, 0755); err == nil {
+			// Create basic CSS file if none exists
+			cssFile := filepath.Join(cssPath, "main.css")
+			if _, err := os.Stat(cssFile); os.IsNotExist(err) {
+				defaultCSS := `/* Main HNS CSS Styles */
+body { font-family: 'Segoe UI', sans-serif; }
+.nav-link.active { font-weight: bold; }
+`
+				os.WriteFile(cssFile, []byte(defaultCSS), 0644)
+			}
+		}
+
+		// Create JS directory
+		jsPath := filepath.Join(staticPath, "js")
+		if err := os.MkdirAll(jsPath, 0755); err == nil {
+			// Create basic JS file if none exists
+			jsFile := filepath.Join(jsPath, "main.js")
+			if _, err := os.Stat(jsFile); os.IsNotExist(err) {
+				defaultJS := `// Main JavaScript for HNS
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('HNS application loaded');
+});
+`
+				os.WriteFile(jsFile, []byte(defaultJS), 0644)
+			}
+		}
 	}
 
 	router.Static("/static", staticPath)
@@ -64,6 +97,32 @@ func SetupWebRouter(
 	userHandler := handlers.NewUserHandler(userRepo, hostnameRepo)
 	apiKeyHandler := handlers.NewAPIKeyHandler(userRepo, apiKeyManager)
 
+	// Add middleware to extract session data and add to context for all routes
+	router.Use(func(c *gin.Context) {
+		// Extract session data and add to context
+		helpers.AddContextUserData(c)
+
+		// Debug logging for troubleshooting
+		path := c.Request.URL.Path
+		method := c.Request.Method
+		loggedIn, _ := c.Get("loggedIn")
+		username, _ := c.Get("username")
+		isAdmin, _ := c.Get("isAdmin")
+
+		// Only log for non-static paths
+		if !strings.HasPrefix(path, "/static/") {
+			log.Debug().
+				Str("path", path).
+				Str("method", method).
+				Interface("loggedIn", loggedIn).
+				Interface("username", username).
+				Interface("isAdmin", isAdmin).
+				Msg("Request context data")
+		}
+
+		c.Next()
+	})
+
 	// Setup public routes
 	router.GET("/", dashboardHandler.Home)
 	router.GET("/login", authHandler.LoginPage)
@@ -76,18 +135,6 @@ func SetupWebRouter(
 	router.GET("/404", baseHandler.NotFound)
 	router.GET("/403", baseHandler.Forbidden)
 
-	// Add a test route for debugging
-	router.GET("/test", func(c *gin.Context) {
-		c.HTML(200, "pages/login.html", gin.H{
-			"Title":       "Test Page",
-			"CurrentYear": helpers.GetCurrentYear(),
-		})
-	})
-	router.Use(func(c *gin.Context) {
-		// Extract session data and add to context
-		helpers.AddContextUserData(c)
-		c.Next()
-	})
 	// Protected routes
 	auth := router.Group("/")
 	auth.Use(authMw.AuthRequired())

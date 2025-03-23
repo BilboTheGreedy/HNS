@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"net/http"
 
 	"github.com/bilbothegreedy/HNS/internal/models"
@@ -25,12 +24,10 @@ const (
 
 // SetupSessionStore configures session management for the application
 func SetupSessionStore(router *gin.Engine) {
-	// Generate secure keys for cookies
-	authKey := generateKey(32) // 32 bytes for AES-256
-	encKey := generateKey(32)  // 32 bytes for encryption
-
-	// Log keys in development (remove in production)
-	log.Debug().Str("auth_key", base64.StdEncoding.EncodeToString(authKey)).Msg("Auth key generated")
+	// Use fixed keys of exactly 32 bytes (required for AES-256)
+	// In production, you should use environment variables or secure key management
+	authKey := []byte("12345678901234567890123456789012") // exactly 32 bytes
+	encKey := []byte("09876543210987654321098765432109")  // exactly 32 bytes
 
 	// Create cookie store with secure keys
 	store := cookie.NewStore(authKey, encKey)

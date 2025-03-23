@@ -55,9 +55,14 @@ func (h *BaseHandler) RenderTemplate(c *gin.Context, templateName string, data g
 		Interface("data_keys", getMapKeys(data)).
 		Msg("Rendering template")
 
-	// Render the template with the full path
-	templatePath := "pages/" + templateName + ".html"
-	c.HTML(http.StatusOK, templatePath, data)
+	// Special case for login and register pages which are full templates
+	if templateName == "login" || templateName == "register" {
+		c.HTML(http.StatusOK, "pages/"+templateName+".html", data)
+		return
+	}
+
+	// Otherwise render with base layout
+	c.HTML(http.StatusOK, "base.html", data)
 }
 
 // getMapKeys returns the keys of a map for logging
@@ -112,7 +117,6 @@ func (h *BaseHandler) Home(c *gin.Context) {
 		return
 	}
 
-	// For logged-in users, redirect to hostnames page
-	// This avoids potential redirect loops with the dashboard
-	c.Redirect(http.StatusFound, "/hostnames")
+	// For logged-in users, redirect to dashboard
+	c.Redirect(http.StatusFound, "/dashboard")
 }

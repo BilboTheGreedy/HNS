@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -478,4 +479,41 @@ func getPaginationParams(c *gin.Context) (int, int) {
 	}
 
 	return limit, offset
+}
+
+// DeleteTemplate handles requests to delete a template
+func (h *APIHandler) DeleteTemplate(c *gin.Context) {
+	// Parse template ID
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid template ID"})
+		return
+	}
+
+	// Check if user has admin permissions
+	role, exists := c.Get("role")
+	if !exists || role != string(models.RoleAdmin) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Admin permission required to delete templates"})
+		return
+	}
+
+	// Get template to verify it exists
+	template, err := h.generatorService.GetTemplateByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Template not found"})
+		log.Error().Err(err).Int64("templateID", id).Msg("Failed to get template")
+		return
+	}
+
+	// Delete the template
+	if err := h.generatorService.DeleteTemplate(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete template"})
+		log.Error().Err(err).Int64("templateID", id).Msg("Failed to delete template")
+		return
+	}
+
+	// Return success response
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("Template '%s' (ID: %d) deleted successfully", template.Name, id),
+	})
 }
