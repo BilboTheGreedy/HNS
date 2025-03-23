@@ -34,24 +34,28 @@ function Write-ColorOutput {
 }
 
 function Cleanup-Templates {
-    param([string]$NamePattern = "ServerTemplate")
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$NamePattern = "ServerTemplate"
+    )
     
     Write-ColorOutput "Looking for templates with name pattern: $NamePattern" -ForegroundColor Cyan
     
     # Check if the function exists before trying to use it
-    if (-not (Get-Command -Name Get-HnsTemplates -ErrorAction SilentlyContinue)) {
-        Write-ColorOutput "Error: Get-HnsTemplates function not found. Is the module properly imported?" -ForegroundColor Red
+    if (-not (Get-Command -Name Get-HnsTemplate -ErrorAction SilentlyContinue)) {
+        Write-ColorOutput "Error: Get-HnsTemplate function not found. Is the module properly imported?" -ForegroundColor Red
         return
     }
     
     # Get all templates
     try {
-        $templates = Get-HnsTemplates -Limit 100
+        # Using the updated Get-HnsTemplate function
+        $templates = Get-HnsTemplate -Limit 100
         
         # Filter templates by name pattern
         $matchingTemplates = $templates | Where-Object { $_.name -like "*$NamePattern*" }
         
-        if ($matchingTemplates.Count -eq 0) {
+        if (-not $matchingTemplates -or $matchingTemplates.Count -eq 0) {
             Write-ColorOutput "No matching templates found." -ForegroundColor Yellow
             return
         }
@@ -62,17 +66,69 @@ function Cleanup-Templates {
         }
         
         # Ask for confirmation
-        $confirmation = Read-Host "Do you want to delete these templates? (y/n)"
+        $confirmation = Read-Host "Do you want to delete these templates and their associated hostnames? (y/n)"
         if ($confirmation -ne 'y') {
             Write-ColorOutput "Template deletion cancelled." -ForegroundColor Yellow
             return
         }
         
-        # Delete templates
+        # First, find and release all hostnames associated with each template
+        foreach ($template in $matchingTemplates) {
+            Write-ColorOutput "Finding hostnames associated with template ID $($template.id)..." -ForegroundColor Yellow
+            
+            try {
+                # Get all hostnames for this template
+                $hostnames = Get-HnsHostname -TemplateId $template.id -Limit 1000
+                
+                if ($hostnames -and $hostnames.Count -gt 0) {
+                    Write-ColorOutput "Found $($hostnames.Count) hostnames for template ID $($template.id)" -ForegroundColor Yellow
+                    
+                    # Process reserved hostnames - commit then release
+                    $reservedHostnames = $hostnames | Where-Object { $_.status -eq "reserved" }
+                    foreach ($hostname in $reservedHostnames) {
+                        try {
+                            Write-ColorOutput "Committing hostname $($hostname.name) (ID: $($hostname.id))..." -ForegroundColor DarkGray
+                            Set-HnsHostnameCommit -HostnameId $hostname.id -Confirm:$false
+                            
+                            Start-Sleep -Milliseconds 500  # Small delay to prevent API overload
+                            
+                            Write-ColorOutput "Releasing hostname $($hostname.name) (ID: $($hostname.id))..." -ForegroundColor DarkGray
+                            Set-HnsHostnameRelease -HostnameId $hostname.id -Confirm:$false
+                        }
+                        catch {
+                            Write-ColorOutput "Failed to process hostname $($hostname.id): $_" -ForegroundColor Red
+                        }
+                    }
+                    
+                    # Process committed hostnames - release
+                    $committedHostnames = $hostnames | Where-Object { $_.status -eq "committed" }
+                    foreach ($hostname in $committedHostnames) {
+                        try {
+                            Write-ColorOutput "Releasing hostname $($hostname.name) (ID: $($hostname.id))..." -ForegroundColor DarkGray
+                            Set-HnsHostnameRelease -HostnameId $hostname.id -Confirm:$false
+                        }
+                        catch {
+                            Write-ColorOutput "Failed to release hostname $($hostname.id): $_" -ForegroundColor Red
+                        }
+                    }
+                } else {
+                    Write-ColorOutput "No hostnames found for template ID $($template.id)" -ForegroundColor Green
+                }
+            }
+            catch {
+                Write-ColorOutput "Failed to get hostnames for template $($template.id): $_" -ForegroundColor Red
+            }
+            
+            # Add a small delay before trying to delete the template
+            Start-Sleep -Seconds 1
+        }
+        
+        # Now try to delete the templates
         foreach ($template in $matchingTemplates) {
             try {
-                # Use the Remove-HnsTemplate function to delete the template
-                Remove-HnsTemplate -Id $template.id
+                Write-ColorOutput "Deleting template: $($template.name) (ID: $($template.id))..." -ForegroundColor Cyan
+                # Using the updated Remove-HnsTemplate function with ShouldProcess support
+                Remove-HnsTemplate -Id $template.id -Confirm:$false
                 Write-ColorOutput "Deleted template: $($template.name) (ID: $($template.id))" -ForegroundColor Green
             }
             catch {
@@ -104,27 +160,27 @@ function Cleanup-Hostnames {
     
     Write-ColorOutput $filterMsg -ForegroundColor Cyan
     
-    # Create filter hashtable
-    $filter = @{}
+    # Create filter params for the updated Get-HnsHostname function
+    $hostnameParams = @{
+        Limit = 100
+        Offset = 0
+    }
+    
     if ($TemplateId -gt 0) {
-        $filter["template_id"] = $TemplateId
+        $hostnameParams["TemplateId"] = $TemplateId
     }
     
     # Get hostnames
     try {
-        $hostnames = Get-HnsHostnames -Limit 100 -Offset 0
+        # Using the updated Get-HnsHostname function
+        $hostnames = Get-HnsHostname @hostnameParams
         
         # Apply name filter if provided
         if ($NamePattern) {
             $hostnames = $hostnames | Where-Object { $_.name -like "*$NamePattern*" }
         }
         
-        # Apply template filter if provided
-        if ($TemplateId -gt 0) {
-            $hostnames = $hostnames | Where-Object { $_.template_id -eq $TemplateId }
-        }
-        
-        if ($hostnames.Count -eq 0) {
+        if (-not $hostnames -or $hostnames.Count -eq 0) {
             Write-ColorOutput "No matching hostnames found." -ForegroundColor Yellow
             return
         }
@@ -145,7 +201,8 @@ function Cleanup-Hostnames {
         $committedHostnames = $hostnames | Where-Object { $_.status -eq "committed" }
         foreach ($hostname in $committedHostnames) {
             try {
-                Set-HnsHostnameRelease -HostnameId $hostname.id
+                # Using the updated Set-HnsHostnameRelease function with ShouldProcess support
+                Set-HnsHostnameRelease -HostnameId $hostname.id -Confirm:$false
                 Write-ColorOutput "Released hostname: $($hostname.name) (ID: $($hostname.id))" -ForegroundColor Green
             }
             catch {
@@ -153,17 +210,15 @@ function Cleanup-Hostnames {
             }
         }
         
-        # Delete or update hostnames
-        # Note: HNS doesn't have a direct delete API for hostnames, 
-        # but we can release them which makes them available again
+        # For reserved hostnames, commit them first, then release them
         $reservedHostnames = $hostnames | Where-Object { $_.status -eq "reserved" }
         foreach ($hostname in $reservedHostnames) {
             try {
-                # For reserved hostnames, we need to commit them first, then release them
-                Set-HnsHostnameCommit -HostnameId $hostname.id
+                # Using the updated Set-HnsHostnameCommit and Set-HnsHostnameRelease functions with ShouldProcess support
+                Set-HnsHostnameCommit -HostnameId $hostname.id -Confirm:$false
                 Write-ColorOutput "Committed hostname: $($hostname.name) (ID: $($hostname.id))" -ForegroundColor Yellow
                 
-                Set-HnsHostnameRelease -HostnameId $hostname.id
+                Set-HnsHostnameRelease -HostnameId $hostname.id -Confirm:$false
                 Write-ColorOutput "Released hostname: $($hostname.name) (ID: $($hostname.id))" -ForegroundColor Green
             }
             catch {
@@ -177,7 +232,10 @@ function Cleanup-Hostnames {
 }
 
 function Cleanup-ApiKeys {
-    param([string]$NamePattern = "PowerShell-Demo")
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$NamePattern = "PowerShell-Demo"
+    )
     
     Write-ColorOutput "Looking for API keys with name pattern: $NamePattern" -ForegroundColor Cyan
     
@@ -188,7 +246,7 @@ function Cleanup-ApiKeys {
         # Filter API keys by name pattern
         $matchingKeys = $apiKeys | Where-Object { $_.name -like "*$NamePattern*" }
         
-        if ($matchingKeys.Count -eq 0) {
+        if (-not $matchingKeys -or $matchingKeys.Count -eq 0) {
             Write-ColorOutput "No matching API keys found." -ForegroundColor Yellow
             return
         }
@@ -208,7 +266,8 @@ function Cleanup-ApiKeys {
         # Delete API keys
         foreach ($key in $matchingKeys) {
             try {
-                Remove-HnsApiKey -Id $key.id
+                # Using the updated Remove-HnsApiKey function with ShouldProcess support
+                Remove-HnsApiKey -Id $key.id -Confirm:$false
                 Write-ColorOutput "Deleted API key: $($key.name) (ID: $($key.id))" -ForegroundColor Green
             }
             catch {

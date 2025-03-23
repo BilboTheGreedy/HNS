@@ -1,13 +1,13 @@
 # HNS-Demo.ps1
-# Demonstration script for the HNS PowerShell module
+# Demonstration script for the improved HNS PowerShell module
 
 # Import the module - modify path as needed
 Import-Module -Name '.\HNS-API.psm1' -Force
 
 # Set variables
 $HnsUrl = "http://localhost:8080"  # Change to your HNS server URL
-$Username = "test"                # Change to your username
-$Password = ConvertTo-SecureString "Logon123!" -AsPlainText -Force  # Change to your password
+$Username = "admin"                # Change to your username
+$Password = ConvertTo-SecureString "admin123" -AsPlainText -Force  # Change to your password
 
 # Helper function for console output without creating return objects
 function Write-Console {
@@ -39,7 +39,7 @@ function Demo-TemplateOperations {
     
     # List existing templates
     Write-Console "Listing templates..."
-    $templates = @(Get-HnsTemplates -Limit 5)
+    $templates = @(Get-HnsTemplate -Limit 5)
     if ($templates.Count -eq 0) {
         Write-Console "No templates found. Let's create one!" -ForegroundColor Yellow
     } else {
@@ -86,7 +86,7 @@ function Demo-TemplateOperations {
         -MaxLength 15 -SequenceStart 1 -SequenceLength 3 -SequencePadding $true -SequenceIncrement 1 -Groups $groups `
         -CreatedBy "PowerShell_Demo_User"
     
-    # Force to integer 
+    # Store the integer template ID
     [int]$resultId = $newTemplate.id
     
     Write-Console "New template created with ID: $resultId" -ForegroundColor Green
@@ -106,13 +106,16 @@ function Demo-TemplateOperations {
         Write-Console "  $($group.name): Length=$($group.length), Position=$($group.position), Type=$($group.validation_type)"
     }
     
-    # Return ONLY the integer - no additional output
+    # Return the template ID
     return $resultId
 }
 
 function Demo-HostnameOperations {
     [CmdletBinding()]
-    param([int] $TemplateId)
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$TemplateId
+    )
     
     Show-Header "Hostname Operations"
     
@@ -145,7 +148,7 @@ function Demo-HostnameOperations {
     
     # List reserved hostnames
     Write-Console "`nListing reserved hostnames..." -ForegroundColor Cyan
-    $reservedHostnames = @(Get-HnsHostnames -Status "reserved" -Limit 5)
+    $reservedHostnames = @(Get-HnsHostname -Status "reserved" -Limit 5)
     if ($reservedHostnames.Count -gt 0) {
         Write-Console "Found $($reservedHostnames.Count) reserved hostnames:" -ForegroundColor Green
         foreach ($hostname in $reservedHostnames) {
@@ -164,14 +167,14 @@ function Demo-HostnameOperations {
     Write-Console "  Sequence: $($hostnameDetails.sequence_num)"
     Write-Console "  Reserved by: $($hostnameDetails.reserved_by)"
     
-    # Commit the hostname
+    # Commit the hostname - updated to handle -Confirm and -WhatIf
     Write-Console "`nCommitting hostname $($reservedHostname.name)..." -ForegroundColor Cyan
-    $committedHostname = Set-HnsHostnameCommit -HostnameId $reservedHostname.id
+    $committedHostname = Set-HnsHostnameCommit -HostnameId $reservedHostname.id -Confirm:$false
     Write-Console "Hostname committed successfully. New status: $($committedHostname.status)" -ForegroundColor Green
     
     # List committed hostnames
     Write-Console "`nListing committed hostnames..." -ForegroundColor Cyan
-    $committedHostnames = @(Get-HnsHostnames -Status "committed" -Limit 5)
+    $committedHostnames = @(Get-HnsHostname -Status "committed" -Limit 5)
     if ($committedHostnames.Count -gt 0) {
         Write-Console "Found $($committedHostnames.Count) committed hostnames:" -ForegroundColor Green
         foreach ($hostname in $committedHostnames) {
@@ -181,9 +184,9 @@ function Demo-HostnameOperations {
         Write-Console "No committed hostnames found." -ForegroundColor Yellow
     }
     
-    # Release the hostname
+    # Release the hostname - updated to handle -Confirm and -WhatIf
     Write-Console "`nReleasing hostname $($reservedHostname.name)..." -ForegroundColor Cyan
-    $releasedHostname = Set-HnsHostnameRelease -HostnameId $reservedHostname.id
+    $releasedHostname = Set-HnsHostnameRelease -HostnameId $reservedHostname.id -Confirm:$false
     Write-Console "Hostname released successfully. New status: $($releasedHostname.status)" -ForegroundColor Green
     
     # Reserve multiple hostnames with different parameters
@@ -216,7 +219,10 @@ function Demo-HostnameOperations {
 
 function Demo-DnsOperations {
     [CmdletBinding()]
-    param([int] $TemplateId)
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$TemplateId
+    )
     
     Show-Header "DNS Operations"
     
@@ -320,16 +326,16 @@ function Demo-ApiKeyOperations {
         Write-Console "Successfully connected using the new API key!" -ForegroundColor Green
         
         # Try to list templates (should work with read scope)
-        $templates = @(Get-HnsTemplates -Limit 3)
+        $templates = @(Get-HnsTemplate -Limit 3)
         Write-Console "Successfully retrieved $($templates.Count) templates using API key" -ForegroundColor Green
     }
     
     # Restore the original connection
     $script:DefaultHeaders = $currentHeaders
     
-    # Delete the API key
+    # Delete the API key - updated to handle -Confirm and -WhatIf
     Write-Console "`nDeleting the API key..." -ForegroundColor Cyan
-    Remove-HnsApiKey -Id $newKey.id
+    Remove-HnsApiKey -Id $newKey.id -Confirm:$false
     
     # List API keys one more time to confirm deletion
     Write-Console "`nListing API keys after deletion..." -ForegroundColor Cyan
@@ -358,7 +364,7 @@ try {
         throw "Failed to connect to HNS server."
     }
     
-    # CRITICAL: Get template ID as an integer and store it properly
+    # Get template ID as an integer
     [int]$templateId = Demo-TemplateOperations
     Write-Console "Template ID returned: $templateId (Type: $($templateId.GetType().FullName))" -ForegroundColor DarkCyan
     Pause-ForReview
@@ -367,9 +373,8 @@ try {
     $reservedIds = Demo-HostnameOperations -TemplateId $templateId
     Pause-ForReview
     
-    # Run DNS operations - THIS IS LINE 332 WHERE THE ERROR HAPPENS
-    # Make sure to pass an integer, not an array
-    Demo-DnsOperations -TemplateId ([int]$templateId)
+    # Run DNS operations with proper typing
+    Demo-DnsOperations -TemplateId $templateId
     Pause-ForReview
     
     # Run API key operations

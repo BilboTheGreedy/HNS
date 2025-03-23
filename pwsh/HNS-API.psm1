@@ -32,6 +32,7 @@ function Initialize-HnsConnection {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$BaseUrl,
         
         [Parameter(Mandatory = $false)]
@@ -76,9 +77,11 @@ function Connect-HnsService {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$Username,
         
         [Parameter(Mandatory = $true)]
+        [ValidateNotNull()]
         [SecureString]$Password
     )
 
@@ -104,8 +107,9 @@ function Connect-HnsService {
         return $response
     }
     catch {
-        Write-Error "Authentication failed: $_"
-        throw
+        $errorMessage = "Authentication failed`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
     finally {
         # Clear the plain text password from memory
@@ -137,39 +141,35 @@ function Test-HnsConnection {
         return $true
     }
     catch {
-        Write-Error "Connection test failed: $_"
+        $errorMessage = "Connection test failed`: $_"
+        Write-Error $errorMessage
         return $false
     }
 }
 
 #endregion
 
-#region Template Management Functions
+#region Sequence Management Functions
 
-
-# Type casting fixes for functions in HNS-API.psm1
-
-# Here are several key functions that need type casting fixes
-# You would update these in the HNS-API.psm1 file
-
-function Get-HnsTemplate {
+function Get-HnsNextSequenceNumber {
     <#
     .SYNOPSIS
-        Gets a specific hostname template by ID.
+        Gets the next available sequence number for a template.
     
     .DESCRIPTION
-        Retrieves detailed information about a template with the specified ID.
+        Retrieves the next available sequence number for hostname generation based on the template ID.
     
-    .PARAMETER Id
-        The ID of the template to retrieve.
+    .PARAMETER TemplateId
+        The ID of the template.
     
     .EXAMPLE
-        Get-HnsTemplate -Id 1
+        Get-HnsNextSequenceNumber -TemplateId 1
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [int]$Id
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$TemplateId
     )
 
     if (-not $script:BaseUrl) {
@@ -177,14 +177,81 @@ function Get-HnsTemplate {
     }
 
     try {
-        # Ensure Id is an integer
-        $templateId = [int]$Id
-        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/templates/$templateId" -Method Get -Headers $script:DefaultHeaders
+        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/sequences/next/$TemplateId" -Method Get -Headers $script:DefaultHeaders
         return $response
     }
     catch {
-        Write-Error "Failed to get template $($Id): $_"
-        throw
+        $errorMessage = "Failed to get next sequence number`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
+    }
+}
+
+#endregion
+
+#region Template Management Functions
+
+function Get-HnsTemplate {
+    <#
+    .SYNOPSIS
+        Gets one or more hostname templates.
+    
+    .DESCRIPTION
+        Retrieves either a specific template by ID or a list of templates with pagination.
+    
+    .PARAMETER Id
+        The ID of a specific template to retrieve. If omitted, returns a list.
+    
+    .PARAMETER Limit
+        Maximum number of templates to return when listing templates.
+    
+    .PARAMETER Offset
+        Number of templates to skip when listing templates.
+    
+    .EXAMPLE
+        Get-HnsTemplate -Id 1
+    
+    .EXAMPLE
+        Get-HnsTemplate -Limit 10 -Offset 0
+    #>
+    [CmdletBinding(DefaultParameterSetName = 'List')]
+    param(
+        [Parameter(Mandatory = $true, ParameterSetName = 'Single')]
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$Id,
+        
+        [Parameter(Mandatory = $false, ParameterSetName = 'List')]
+        [ValidateRange(1, 100)]
+        [int]$Limit = 10,
+        
+        [Parameter(Mandatory = $false, ParameterSetName = 'List')]
+        [ValidateRange(0, [int]::MaxValue)]
+        [int]$Offset = 0
+    )
+
+    if (-not $script:BaseUrl) {
+        throw "HNS connection not initialized. Call Initialize-HnsConnection first."
+    }
+
+    try {
+        if ($PSCmdlet.ParameterSetName -eq 'Single') {
+            $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/templates/$Id" -Method Get -Headers $script:DefaultHeaders
+            return $response
+        }
+        else {
+            $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/templates?limit=$Limit&offset=$Offset" -Method Get -Headers $script:DefaultHeaders
+            return $response.templates
+        }
+    }
+    catch {
+        if ($PSCmdlet.ParameterSetName -eq 'Single') {
+            $errorContext = "Failed to get template $Id"
+        } else {
+            $errorContext = "Failed to get templates"
+        }
+        $errorMessage = "$errorContext`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
@@ -220,6 +287,9 @@ function New-HnsTemplate {
     .PARAMETER Groups
         Array of groups for the template, each with a name, length, validation type, validation value, and required flag.
     
+    .PARAMETER CreatedBy
+        Username of the creator. If not specified, will attempt to determine from authentication context.
+    
     .EXAMPLE
         $groups = @(
             @{
@@ -250,27 +320,33 @@ function New-HnsTemplate {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$Name,
         
         [Parameter(Mandatory = $false)]
         [string]$Description = "",
         
         [Parameter(Mandatory = $true)]
+        [ValidateRange(1, 64)]
         [int]$MaxLength,
         
         [Parameter(Mandatory = $false)]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$SequenceStart = 1,
         
         [Parameter(Mandatory = $true)]
+        [ValidateRange(1, 10)]
         [int]$SequenceLength,
         
         [Parameter(Mandatory = $false)]
         [bool]$SequencePadding = $true,
         
         [Parameter(Mandatory = $false)]
+        [ValidateRange(1, 100)]
         [int]$SequenceIncrement = 1,
         
         [Parameter(Mandatory = $true)]
+        [ValidateNotNull()]
         [array]$Groups,
         
         [Parameter(Mandatory = $false)]
@@ -323,8 +399,49 @@ function New-HnsTemplate {
         return $response
     }
     catch {
-        Write-Error "Failed to create template: $_"
-        throw
+        $errorMessage = "Failed to create template`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
+    }
+}
+
+function Remove-HnsTemplate {
+    <#
+    .SYNOPSIS
+        Deletes a hostname template.
+    
+    .DESCRIPTION
+        Permanently removes a template from the HNS system.
+    
+    .PARAMETER Id
+        The ID of the template to delete.
+    
+    .EXAMPLE
+        Remove-HnsTemplate -Id 3
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$Id
+    )
+
+    if (-not $script:BaseUrl) {
+        throw "HNS connection not initialized. Call Initialize-HnsConnection first."
+    }
+
+    try {
+        if ($PSCmdlet.ShouldProcess("Template with ID $Id", "Delete")) {
+            # Use the DELETE method to remove the template
+            $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/templates/$Id" -Method Delete -Headers $script:DefaultHeaders
+            Write-Host "Template with ID $Id deleted successfully."
+            return $true
+        }
+    }
+    catch {
+        $errorMessage = "Failed to delete template $Id`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
@@ -332,19 +449,22 @@ function New-HnsTemplate {
 
 #region Hostname Management Functions
 
-function Get-HnsHostnames {
+function Get-HnsHostname {
     <#
     .SYNOPSIS
-        Gets a list of hostnames with optional filtering.
+        Gets one or more hostnames.
     
     .DESCRIPTION
-        Retrieves hostnames with optional filtering by status, template, or name.
+        Retrieves either a specific hostname by ID or a list of hostnames with optional filtering and pagination.
+    
+    .PARAMETER Id
+        The ID of a specific hostname to retrieve. If omitted, returns a list.
     
     .PARAMETER Limit
-        Maximum number of hostnames to return.
+        Maximum number of hostnames to return when listing hostnames.
     
     .PARAMETER Offset
-        Number of hostnames to skip.
+        Number of hostnames to skip when listing hostnames.
     
     .PARAMETER Status
         Filter by hostname status (available, reserved, committed, released).
@@ -359,27 +479,37 @@ function Get-HnsHostnames {
         Filter by the username who reserved the hostname.
     
     .EXAMPLE
-        Get-HnsHostnames -Status "reserved" -Limit 20
+        Get-HnsHostname -Id 123
+    
+    .EXAMPLE
+        Get-HnsHostname -Status "reserved" -Limit 20
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'List')]
     param(
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true, ParameterSetName = 'Single')]
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$Id,
+        
+        [Parameter(Mandatory = $false, ParameterSetName = 'List')]
+        [ValidateRange(1, 100)]
         [int]$Limit = 10,
         
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $false, ParameterSetName = 'List')]
+        [ValidateRange(0, [int]::MaxValue)]
         [int]$Offset = 0,
         
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $false, ParameterSetName = 'List')]
         [ValidateSet("available", "reserved", "committed", "released")]
         [string]$Status,
         
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $false, ParameterSetName = 'List')]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$TemplateId,
         
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $false, ParameterSetName = 'List')]
         [string]$Name,
         
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $false, ParameterSetName = 'List')]
         [string]$ReservedBy
     )
 
@@ -387,105 +517,42 @@ function Get-HnsHostnames {
         throw "HNS connection not initialized. Call Initialize-HnsConnection first."
     }
 
-    # Build query string
-    $queryParams = @{
-        limit = $Limit
-        offset = $Offset
-    }
-
-    if ($Status) { $queryParams["status"] = $Status }
-    if ($TemplateId) { $queryParams["template_id"] = $TemplateId }
-    if ($Name) { $queryParams["name"] = $Name }
-    if ($ReservedBy) { $queryParams["reserved_by"] = $ReservedBy }
-
-    $queryString = [System.Web.HttpUtility]::ParseQueryString([string]::Empty)
-    foreach ($key in $queryParams.Keys) {
-        $queryString.Add($key, $queryParams[$key])
-    }
-
     try {
-        $uri = "$script:BaseUrl/api/hostnames?$($queryString.ToString())"
-        $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $script:DefaultHeaders
-        return $response.hostnames
+        if ($PSCmdlet.ParameterSetName -eq 'Single') {
+            $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/hostnames/$Id" -Method Get -Headers $script:DefaultHeaders
+            return $response
+        }
+        else {
+            # Build query string
+            $queryParams = @{
+                limit = $Limit
+                offset = $Offset
+            }
+
+            if ($Status) { $queryParams["status"] = $Status }
+            if ($TemplateId) { $queryParams["template_id"] = $TemplateId }
+            if ($Name) { $queryParams["name"] = $Name }
+            if ($ReservedBy) { $queryParams["reserved_by"] = $ReservedBy }
+
+            $queryString = [System.Web.HttpUtility]::ParseQueryString([string]::Empty)
+            foreach ($key in $queryParams.Keys) {
+                $queryString.Add($key, $queryParams[$key])
+            }
+
+            $uri = "$script:BaseUrl/api/hostnames?$($queryString.ToString())"
+            $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $script:DefaultHeaders
+            return $response.hostnames
+        }
     }
     catch {
-        Write-Error "Failed to get hostnames: $_"
-        throw
-    }
-}
-
-function Get-HnsHostname {
-    <#
-    .SYNOPSIS
-        Gets a specific hostname by ID.
-    
-    .DESCRIPTION
-        Retrieves detailed information about a hostname with the specified ID.
-    
-    .PARAMETER Id
-        The ID of the hostname to retrieve.
-    
-    .EXAMPLE
-        Get-HnsHostname -Id 123
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [int]$Id
-    )
-
-    if (-not $script:BaseUrl) {
-        throw "HNS connection not initialized. Call Initialize-HnsConnection first."
-    }
-
-    try {
-        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/hostnames/$Id" -Method Get -Headers $script:DefaultHeaders
-        return $response
-    }
-    catch {
-        Write-Error "Failed to get hostname $($Id): $_"
-        throw
-    }
-}
-
-# Type casting fixes for functions in HNS-API.psm1
-
-# Here are several key functions that need type casting fixes
-# You would update these in the HNS-API.psm1 file
-
-function Get-HnsTemplate {
-    <#
-    .SYNOPSIS
-        Gets a specific hostname template by ID.
-    
-    .DESCRIPTION
-        Retrieves detailed information about a template with the specified ID.
-    
-    .PARAMETER Id
-        The ID of the template to retrieve.
-    
-    .EXAMPLE
-        Get-HnsTemplate -Id 1
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [int]$Id
-    )
-
-    if (-not $script:BaseUrl) {
-        throw "HNS connection not initialized. Call Initialize-HnsConnection first."
-    }
-
-    try {
-        # Ensure Id is an integer
-        $templateId = [int]$Id
-        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/templates/$templateId" -Method Get -Headers $script:DefaultHeaders
-        return $response
-    }
-    catch {
-        Write-Error "Failed to get template $($Id): $_"
-        throw
+        if ($PSCmdlet.ParameterSetName -eq 'Single') {
+            $errorContext = "Failed to get hostname $Id"
+        } else {
+            $errorContext = "Failed to get hostnames"
+        }
+        $errorMessage = "$errorContext`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
@@ -515,13 +582,15 @@ function New-HnsHostnameGeneration {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$TemplateId,
         
         [Parameter(Mandatory = $false)]
+        [ValidateRange(0, [int]::MaxValue)]
         [int]$SequenceNum = 0,
         
         [Parameter(Mandatory = $false)]
-        [hashtable]$Params,
+        [hashtable]$Params = @{},
         
         [Parameter(Mandatory = $false)]
         [switch]$CheckDns
@@ -531,13 +600,9 @@ function New-HnsHostnameGeneration {
         throw "HNS connection not initialized. Call Initialize-HnsConnection first."
     }
 
-    # Ensure TemplateId is an integer
-    $templateId = [int]$TemplateId
-    $sequenceNum = [int]$SequenceNum
-
     $body = @{
-        template_id = $templateId
-        sequence_num = $sequenceNum
+        template_id = $TemplateId
+        sequence_num = $SequenceNum
         params = $Params
     } | ConvertTo-Json
 
@@ -551,8 +616,9 @@ function New-HnsHostnameGeneration {
         return $response
     }
     catch {
-        Write-Error "Failed to generate hostname: $_"
-        throw
+        $errorMessage = "Failed to generate hostname`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
@@ -579,12 +645,14 @@ function New-HnsHostnameReservation {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$TemplateId,
         
         [Parameter(Mandatory = $false)]
-        [hashtable]$Params,
+        [hashtable]$Params = @{},
         
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$RequestedBy
     )
 
@@ -592,12 +660,9 @@ function New-HnsHostnameReservation {
         throw "HNS connection not initialized. Call Initialize-HnsConnection first."
     }
 
-    # Ensure parameters have proper types
-    $templateId = [int]$TemplateId
-
     # Create the request body
     $body = @{
-        template_id = $templateId
+        template_id = $TemplateId
         params = $Params
         requested_by = $RequestedBy
     } | ConvertTo-Json
@@ -608,8 +673,9 @@ function New-HnsHostnameReservation {
         return $response
     }
     catch {
-        Write-Error "Failed to reserve hostname: $_"
-        throw
+        $errorMessage = "Failed to reserve hostname`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
@@ -627,9 +693,10 @@ function Set-HnsHostnameCommit {
     .EXAMPLE
         Set-HnsHostnameCommit -HostnameId 123
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$HostnameId
     )
 
@@ -642,13 +709,16 @@ function Set-HnsHostnameCommit {
     } | ConvertTo-Json
 
     try {
-        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/hostnames/commit" -Method Post -Body $body -Headers $script:DefaultHeaders
-        Write-Host "Hostname $($response.name) committed successfully"
-        return $response
+        if ($PSCmdlet.ShouldProcess("Hostname ID $HostnameId", "Commit")) {
+            $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/hostnames/commit" -Method Post -Body $body -Headers $script:DefaultHeaders
+            Write-Host "Hostname $($response.name) committed successfully"
+            return $response
+        }
     }
     catch {
-        Write-Error "Failed to commit hostname: $_"
-        throw
+        $errorMessage = "Failed to commit hostname`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
@@ -666,9 +736,10 @@ function Set-HnsHostnameRelease {
     .EXAMPLE
         Set-HnsHostnameRelease -HostnameId 123
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$HostnameId
     )
 
@@ -681,13 +752,16 @@ function Set-HnsHostnameRelease {
     } | ConvertTo-Json
 
     try {
-        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/hostnames/release" -Method Post -Body $body -Headers $script:DefaultHeaders
-        Write-Host "Hostname $($response.name) released successfully"
-        return $response
+        if ($PSCmdlet.ShouldProcess("Hostname ID $HostnameId", "Release")) {
+            $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/hostnames/release" -Method Post -Body $body -Headers $script:DefaultHeaders
+            Write-Host "Hostname $($response.name) released successfully"
+            return $response
+        }
     }
     catch {
-        Write-Error "Failed to release hostname: $_"
-        throw
+        $errorMessage = "Failed to release hostname`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
@@ -712,6 +786,7 @@ function Test-HnsDnsHostname {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$Hostname
     )
 
@@ -724,49 +799,12 @@ function Test-HnsDnsHostname {
         return $response
     }
     catch {
-        Write-Error "Failed to check hostname in DNS: $_"
-        throw
+        $errorMessage = "Failed to check hostname in DNS`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
-function Get-HnsTemplates {
-    <#
-    .SYNOPSIS
-        Gets a list of hostname templates.
-    
-    .DESCRIPTION
-        Retrieves the list of hostname templates with optional pagination.
-    
-    .PARAMETER Limit
-        Maximum number of templates to return.
-    
-    .PARAMETER Offset
-        Number of templates to skip.
-    
-    .EXAMPLE
-        Get-HnsTemplates -Limit 10 -Offset 0
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $false)]
-        [int]$Limit = 10,
-        
-        [Parameter(Mandatory = $false)]
-        [int]$Offset = 0
-    )
 
-    if (-not $script:BaseUrl) {
-        throw "HNS connection not initialized. Call Initialize-HnsConnection first."
-    }
-
-    try {
-        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/templates?limit=$Limit&offset=$Offset" -Method Get -Headers $script:DefaultHeaders
-        return $response.templates
-    }
-    catch {
-        Write-Error "Failed to get templates: $_"
-        throw
-    }
-}
 function Start-HnsDnsScan {
     <#
     .SYNOPSIS
@@ -796,18 +834,22 @@ function Start-HnsDnsScan {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$TemplateId,
         
         [Parameter(Mandatory = $false)]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$StartSeq = 1,
         
         [Parameter(Mandatory = $true)]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$EndSeq,
         
         [Parameter(Mandatory = $false)]
-        [hashtable]$Params,
+        [hashtable]$Params = @{},
         
         [Parameter(Mandatory = $false)]
+        [ValidateRange(1, 50)]
         [int]$MaxConcurrent = 10
     )
 
@@ -815,18 +857,16 @@ function Start-HnsDnsScan {
         throw "HNS connection not initialized. Call Initialize-HnsConnection first."
     }
 
-    # Ensure parameters are integers
-    $templateId = [int]$TemplateId
-    $startSeq = [int]$StartSeq
-    $endSeq = [int]$EndSeq
-    $maxConcurrent = [int]$MaxConcurrent
+    if ($EndSeq -lt $StartSeq) {
+        throw "EndSeq must be greater than or equal to StartSeq."
+    }
 
     $body = @{
-        template_id = $templateId
-        start_seq = $startSeq
-        end_seq = $endSeq
+        template_id = $TemplateId
+        start_seq = $StartSeq
+        end_seq = $EndSeq
         params = $Params
-        max_concurrent = $maxConcurrent
+        max_concurrent = $MaxConcurrent
     } | ConvertTo-Json
 
     try {
@@ -834,8 +874,9 @@ function Start-HnsDnsScan {
         return $response
     }
     catch {
-        Write-Error "Failed to scan DNS: $_"
-        throw
+        $errorMessage = "Failed to scan DNS`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 #endregion
@@ -869,8 +910,9 @@ function Get-HnsApiKeys {
         return $response.api_keys
     }
     catch {
-        Write-Error "Failed to get API keys: $_"
-        throw
+        $errorMessage = "Failed to get API keys`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
@@ -894,9 +936,11 @@ function New-HnsApiKey {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$Name,
         
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$Scope
     )
 
@@ -919,8 +963,9 @@ function New-HnsApiKey {
         return $response
     }
     catch {
-        Write-Error "Failed to create API key: $_"
-        throw
+        $errorMessage = "Failed to create API key`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
@@ -938,9 +983,10 @@ function Remove-HnsApiKey {
     .EXAMPLE
         Remove-HnsApiKey -Id 5
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateRange(1, [int]::MaxValue)]
         [int]$Id
     )
 
@@ -953,89 +999,19 @@ function Remove-HnsApiKey {
     }
 
     try {
-        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/apikeys/$Id" -Method Delete -Headers $script:DefaultHeaders
-        Write-Host "API key deleted successfully"
-        return $true
+        if ($PSCmdlet.ShouldProcess("API key with ID $Id", "Delete")) {
+            $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/apikeys/$Id" -Method Delete -Headers $script:DefaultHeaders
+            Write-Host "API key deleted successfully"
+            return $true
+        }
     }
     catch {
-        Write-Error "Failed to delete API key: $_"
-        throw
+        $errorMessage = "Failed to delete API key`: $_"
+        Write-Error $errorMessage
+        throw $errorMessage
     }
 }
 
 #endregion
 
-#region Sequence Management Functions
-
-function Get-HnsNextSequenceNumber {
-    <#
-    .SYNOPSIS
-        Gets the next available sequence number for a template.
-    
-    .DESCRIPTION
-        Retrieves the next available sequence number for hostname generation based on the template ID.
-    
-    .PARAMETER TemplateId
-        The ID of the template.
-    
-    .EXAMPLE
-        Get-HnsNextSequenceNumber -TemplateId 1
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [int]$TemplateId
-    )
-
-    if (-not $script:BaseUrl) {
-        throw "HNS connection not initialized. Call Initialize-HnsConnection first."
-    }
-
-    # Ensure TemplateId is an integer
-    $templateId = [int]$TemplateId
-
-    try {
-        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/sequences/next/$templateId" -Method Get -Headers $script:DefaultHeaders
-        return $response
-    }
-    catch {
-        Write-Error "Failed to get next sequence number: $_"
-        throw
-    }
-}
-
-function Remove-HnsTemplate {
-    <#
-    .SYNOPSIS
-        Deletes a hostname template.
-    
-    .DESCRIPTION
-        Permanently removes a template from the HNS system.
-    
-    .PARAMETER Id
-        The ID of the template to delete.
-    
-    .EXAMPLE
-        Remove-HnsTemplate -Id 3
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [int]$Id
-    )
-
-    if (-not $script:BaseUrl) {
-        throw "HNS connection not initialized. Call Initialize-HnsConnection first."
-    }
-
-    try {
-        # Use the DELETE method to remove the template
-        $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/templates/$Id" -Method Delete -Headers $script:DefaultHeaders
-        Write-Host "Template with ID $Id deleted successfully."
-        return $true
-    }
-    catch {
-        Write-Error "Failed to delete template $($Id): $_"
-        throw
-    }
-}
+#region
