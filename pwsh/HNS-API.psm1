@@ -411,40 +411,132 @@ function Remove-HnsTemplate {
         Deletes a hostname template.
     
     .DESCRIPTION
-        Permanently removes a template from the HNS system.
+        Permanently removes a template from the HNS system. Checks for dependencies before attempting deletion.
     
     .PARAMETER Id
         The ID of the template to delete.
     
+    .PARAMETER Force
+        If specified, attempts to release associated hostnames before deleting the template.
+        
+    .PARAMETER CheckOnly
+        If specified, only checks for dependencies without attempting to delete the template.
+    
     .EXAMPLE
         Remove-HnsTemplate -Id 3
+        
+    .EXAMPLE
+        Remove-HnsTemplate -Id 3 -Force
+        
+    .EXAMPLE
+        Remove-HnsTemplate -Id 3 -CheckOnly
     #>
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateRange(1, [int]::MaxValue)]
-        [int]$Id
+        [int]$Id,
+        
+        [Parameter(Mandatory = $false)]
+        [switch]$Force,
+        
+        [Parameter(Mandatory = $false)]
+        [switch]$CheckOnly
     )
 
     if (-not $script:BaseUrl) {
         throw "HNS connection not initialized. Call Initialize-HnsConnection first."
     }
 
+    # First, check for associated hostnames
     try {
+        Write-Verbose "Checking template $Id for associated hostnames..."
+        $template = Get-HnsTemplate -Id $Id
+        
+        if (-not $template) {
+            Write-Error "Template with ID $Id not found."
+            return $false
+        }
+        
+        # Check for hostnames using this template
+        $uri = "$script:BaseUrl/api/hostnames?template_id=$Id&limit=1"
+        $hostnameCheck = Invoke-RestMethod -Uri $uri -Method Get -Headers $script:DefaultHeaders
+        
+        if ($hostnameCheck.total -gt 0) {
+            $errorMsg = "Template '$($template.name)' (ID: $Id) has $($hostnameCheck.total) associated hostnames that must be handled first."
+            
+            if ($CheckOnly) {
+                Write-Output $errorMsg
+                return $false
+            }
+            
+            if ($Force) {
+                Write-Warning $errorMsg
+                Write-Host "Force flag specified. Attempting to release and clean up hostnames..." -ForegroundColor Yellow
+                
+                # Implementation for Force parameter would go here
+                # This could be quite complex and is not implemented in this example
+                Write-Warning "Force cleanup not implemented in this version. Please use HNS-Cleanup.ps1 script instead."
+                return $false
+            }
+            else {
+                Write-Error $errorMsg
+                Write-Host "To check all dependencies: Remove-HnsTemplate -Id $Id -CheckOnly" -ForegroundColor Cyan
+                Write-Host "To delete all associated hostnames manually:" -ForegroundColor Cyan
+                Write-Host "1. Get all hostnames: Get-HnsHostname -TemplateId $Id" -ForegroundColor Cyan
+                Write-Host "2. Commit any reserved hostnames: Set-HnsHostnameCommit -HostnameId <id>" -ForegroundColor Cyan
+                Write-Host "3. Release any committed hostnames: Set-HnsHostnameRelease -HostnameId <id>" -ForegroundColor Cyan
+                Write-Host "4. Then retry template deletion" -ForegroundColor Cyan
+                Write-Host "Or use the cleanup script: ./HNS-Cleanup.ps1 to handle this automatically" -ForegroundColor Green
+                return $false
+            }
+        }
+        
+        if ($CheckOnly) {
+            Write-Host "Template '$($template.name)' (ID: $Id) has no associated hostnames and can be safely deleted." -ForegroundColor Green
+            return $true
+        }
+        
+        # If we get here, there are no dependencies and we can delete if not in CheckOnly mode
         if ($PSCmdlet.ShouldProcess("Template with ID $Id", "Delete")) {
-            # Use the DELETE method to remove the template
             $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/templates/$Id" -Method Delete -Headers $script:DefaultHeaders
-            Write-Host "Template with ID $Id deleted successfully."
+            Write-Host "Template '$($template.name)' (ID: $Id) deleted successfully." -ForegroundColor Green
             return $true
         }
     }
     catch {
+        # Check if the error response contains a structured error
+        try {
+            $errorObj = $_.ErrorDetails.Message | ConvertFrom-Json
+            if ($errorObj.error -and $errorObj.message) {
+                Write-Error "$($errorObj.error): $($errorObj.message)"
+                
+                # Provide helpful suggestions based on error
+                if ($errorObj.error -like "*dependencies*" -or $errorObj.error -like "*constraint*") {
+                    Write-Host "Suggested actions:" -ForegroundColor Cyan
+                    Write-Host "1. Use Remove-HnsTemplate -Id $Id -CheckOnly to see details" -ForegroundColor Cyan
+                    Write-Host "2. Use the cleanup script: ./HNS-Cleanup.ps1 to handle this automatically" -ForegroundColor Cyan
+                }
+                return $false
+            }
+        }
+        catch {
+            # Could not parse as JSON, continue with standard error handling
+        }
+        
         $errorMessage = "Failed to delete template $Id`: $_"
         Write-Error $errorMessage
-        throw $errorMessage
+        
+        # Try to provide helpful context based on error message
+        if ($_.Exception.Message -like "*foreign key constraint*") {
+            Write-Host "This error indicates the template has associated hostnames or groups." -ForegroundColor Yellow
+            Write-Host "You need to remove all hostnames using this template before it can be deleted." -ForegroundColor Yellow
+            Write-Host "Consider using the cleanup script: ./HNS-Cleanup.ps1" -ForegroundColor Green
+        }
+        
+        return $false
     }
 }
-
 #endregion
 
 #region Hostname Management Functions
@@ -455,16 +547,17 @@ function Get-HnsHostname {
         Gets one or more hostnames.
     
     .DESCRIPTION
-        Retrieves either a specific hostname by ID or a list of hostnames with optional filtering and pagination.
+        Retrieves either a specific hostname by ID or a list of hostnames with optional filtering.
+        By default, returns up to 100 results without requiring additional parameters.
     
     .PARAMETER Id
-        The ID of a specific hostname to retrieve. If omitted, returns a list.
+        The ID of a specific hostname to retrieve. If specified, returns just that hostname.
     
     .PARAMETER Limit
-        Maximum number of hostnames to return when listing hostnames.
+        Maximum number of hostnames to return when listing hostnames (default: 100).
     
     .PARAMETER Offset
-        Number of hostnames to skip when listing hostnames.
+        Number of hostnames to skip when listing hostnames (default: 0).
     
     .PARAMETER Status
         Filter by hostname status (available, reserved, committed, released).
@@ -479,10 +572,24 @@ function Get-HnsHostname {
         Filter by the username who reserved the hostname.
     
     .EXAMPLE
-        Get-HnsHostname -Id 123
+        Get-HnsHostname
+        
+        # Returns the first 100 hostnames
     
     .EXAMPLE
-        Get-HnsHostname -Status "reserved" -Limit 20
+        Get-HnsHostname -Id 123
+        
+        # Returns the specific hostname with ID 123
+    
+    .EXAMPLE
+        Get-HnsHostname -Status "reserved"
+        
+        # Returns up to 100 reserved hostnames
+        
+    .EXAMPLE
+        Get-HnsHostname -TemplateId 5 -Status "committed"
+        
+        # Returns up to 100 committed hostnames from template ID 5
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
     param(
@@ -491,8 +598,8 @@ function Get-HnsHostname {
         [int]$Id,
         
         [Parameter(Mandatory = $false, ParameterSetName = 'List')]
-        [ValidateRange(1, 100)]
-        [int]$Limit = 10,
+        [ValidateRange(1, 500)]
+        [int]$Limit = 100,
         
         [Parameter(Mandatory = $false, ParameterSetName = 'List')]
         [ValidateRange(0, [int]::MaxValue)]
@@ -519,29 +626,68 @@ function Get-HnsHostname {
 
     try {
         if ($PSCmdlet.ParameterSetName -eq 'Single') {
+            # Get a single hostname by ID
             $response = Invoke-RestMethod -Uri "$script:BaseUrl/api/hostnames/$Id" -Method Get -Headers $script:DefaultHeaders
             return $response
         }
         else {
-            # Build query string
-            $queryParams = @{
-                limit = $Limit
-                offset = $Offset
-            }
+            # Build query string for filtering
+            $queryParams = [System.Web.HttpUtility]::ParseQueryString([string]::Empty)
+            $queryParams.Add("limit", $Limit)
+            $queryParams.Add("offset", $Offset)
 
-            if ($Status) { $queryParams["status"] = $Status }
-            if ($TemplateId) { $queryParams["template_id"] = $TemplateId }
-            if ($Name) { $queryParams["name"] = $Name }
-            if ($ReservedBy) { $queryParams["reserved_by"] = $ReservedBy }
+            # Add filters if specified
+            if ($Status) { $queryParams.Add("status", $Status) }
+            if ($TemplateId) { $queryParams.Add("template_id", $TemplateId) }
+            if ($Name) { $queryParams.Add("name", $Name) }
+            if ($ReservedBy) { $queryParams.Add("reserved_by", $ReservedBy) }
 
-            $queryString = [System.Web.HttpUtility]::ParseQueryString([string]::Empty)
-            foreach ($key in $queryParams.Keys) {
-                $queryString.Add($key, $queryParams[$key])
-            }
-
-            $uri = "$script:BaseUrl/api/hostnames?$($queryString.ToString())"
+            # Construct the full URI
+            $uri = "$script:BaseUrl/api/hostnames?$($queryParams.ToString())"
+            Write-Verbose "Requesting: $uri"
+            
+            # Make the API call
             $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $script:DefaultHeaders
-            return $response.hostnames
+            
+            # Add metadata as custom properties to the result
+            $result = $response.hostnames
+            if ($result -and $result.Count -gt 0) {
+                # Create a custom object to hold the result with metadata
+                $outputObject = [PSCustomObject]@{
+                    hostnames = $result
+                    total = $response.total
+                    limit = $response.limit
+                    offset = $response.offset
+                    count = $result.Count
+                }
+                
+                # Add a custom property to support array and object behavior
+                # This allows the command to be used both ways:
+                # $hostnames = Get-HnsHostname
+                # foreach ($hostname in $hostnames) { ... }
+                # AND
+                # $result = Get-HnsHostname
+                # $result.total - to get total count
+                Add-Member -InputObject $outputObject -MemberType ScriptMethod -Name "GetEnumerator" -Value {
+                    return $this.hostnames.GetEnumerator()
+                }
+                
+                # Add these methods for PowerShell array-like behavior
+                Add-Member -InputObject $outputObject -MemberType ScriptProperty -Name "Count" -Value { 
+                    return $this.hostnames.Count 
+                }
+                
+                Add-Member -InputObject $outputObject -MemberType ScriptMethod -Name "get_Item" -Value {
+                    param($index)
+                    return $this.hostnames[$index]
+                }
+                
+                # Return the enhanced result
+                return $outputObject
+            }
+            
+            # Return empty array if no results
+            return @()
         }
     }
     catch {

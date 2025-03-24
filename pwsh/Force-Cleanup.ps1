@@ -40,132 +40,80 @@ function Force-CleanTemplate {
         [int]$TemplateId,
         
         [Parameter(Mandatory = $false)]
-        [int]$BatchSize = 20
+        [switch]$SkipConfirmation
     )
     
-    Write-ColorOutput "Force cleaning template ID $TemplateId..." -ForegroundColor Magenta
+    Write-ColorOutput "Cleaning template ID $TemplateId..." -ForegroundColor Cyan
     
-    # Process in batches to handle large numbers of hostnames
-    $offset = 0
-    $continueProcessing = $true
-    $processedCount = 0
-    
-    while ($continueProcessing) {
-        # Get hostnames in batches
-        try {
-            $hostnameParams = @{
-                TemplateId = $TemplateId
-                Limit = $BatchSize
-                Offset = $offset
+    try {
+        # Check if the template exists
+        $template = Get-HnsTemplate -Id $TemplateId -ErrorAction Stop
+        Write-ColorOutput "Found template: $($template.name) (ID: $TemplateId)" -ForegroundColor Green
+        
+        # Get all hostnames for this template
+        Write-ColorOutput "Fetching all hostnames for template..." -ForegroundColor Yellow
+        $hostnames = Get-HnsHostname -TemplateId $TemplateId -Limit 1000 -ErrorAction Stop
+        
+        if ($hostnames -and $hostnames.Count -gt 0) {
+            Write-ColorOutput "Found $($hostnames.Count) hostnames for template ID $TemplateId" -ForegroundColor Yellow
+            
+            if (-not $SkipConfirmation) {
+                $confirmation = Read-Host "Do you want to process and release all these hostnames? (y/n)"
+                if ($confirmation -ne 'y') {
+                    Write-ColorOutput "Operation cancelled." -ForegroundColor Yellow
+                    return $false
+                }
             }
             
-            Write-ColorOutput "Fetching hostnames batch (Offset: $offset, Limit: $BatchSize)..." -ForegroundColor DarkGray
-            $hostnames = Get-HnsHostname @hostnameParams
-            
-            if (-not $hostnames -or $hostnames.Count -eq 0) {
-                Write-ColorOutput "No more hostnames found." -ForegroundColor Green
-                $continueProcessing = $false
-                continue
-            }
-            
-            Write-ColorOutput "Processing batch of $($hostnames.Count) hostnames..." -ForegroundColor Cyan
-            
-            foreach ($hostname in $hostnames) {
-                Write-ColorOutput "Processing hostname: $($hostname.name) (ID: $($hostname.id), Status: $($hostname.status))" -ForegroundColor DarkGray
-                
+            # First, commit all reserved hostnames
+            $reservedHostnames = $hostnames | Where-Object { $_.status -eq "reserved" }
+            foreach ($hostname in $reservedHostnames) {
                 try {
-                    # Process based on status
-                    switch ($hostname.status) {
-                        "reserved" {
-                            # Commit then release
-                            Write-ColorOutput "  - Committing reserved hostname..." -ForegroundColor Yellow
-                            Set-HnsHostnameCommit -HostnameId $hostname.id -Confirm:$false -ErrorAction Continue
-                            Start-Sleep -Milliseconds 300
-                            
-                            Write-ColorOutput "  - Releasing hostname..." -ForegroundColor Yellow
-                            Set-HnsHostnameRelease -HostnameId $hostname.id -Confirm:$false -ErrorAction Continue
-                        }
-                        "committed" {
-                            # Just release
-                            Write-ColorOutput "  - Releasing committed hostname..." -ForegroundColor Yellow
-                            Set-HnsHostnameRelease -HostnameId $hostname.id -Confirm:$false -ErrorAction Continue
-                        }
-                        "available" {
-                            # For available hostnames, try to reserve, commit, then release
-                            Write-ColorOutput "  - Attempting to reserve, commit, then release 'available' hostname..." -ForegroundColor Yellow
-                            try {
-                                # Get template first to know what params we need
-                                $template = Get-HnsTemplate -Id $TemplateId
-                                
-                                # Build minimum params required (could be enhanced)
-                                $params = @{}
-                                foreach ($group in $template.groups) {
-                                    if ($group.is_required -and $group.validation_type -eq "list") {
-                                        $values = $group.validation_value.Split(",")
-                                        if ($values.Length -gt 0) {
-                                            $params[$group.name] = $values[0].Trim()
-                                        }
-                                    }
-                                }
-                                
-                                # Reserve with the params
-                                $reserved = New-HnsHostnameReservation -TemplateId $TemplateId -Params $params -RequestedBy "cleanup_script"
-                                Start-Sleep -Milliseconds 300
-                                
-                                # Commit it
-                                Set-HnsHostnameCommit -HostnameId $reserved.id -Confirm:$false
-                                Start-Sleep -Milliseconds 300
-                                
-                                # Release it
-                                Set-HnsHostnameRelease -HostnameId $reserved.id -Confirm:$false
-                            }
-                            catch {
-                                Write-ColorOutput "  - Could not process 'available' hostname: $_" -ForegroundColor Red
-                            }
-                        }
-                        default {
-                            Write-ColorOutput "  - Unrecognized status '$($hostname.status)'. Skipping..." -ForegroundColor Red
-                        }
-                    }
+                    Write-ColorOutput "Committing hostname $($hostname.name) (ID: $($hostname.id))..." -ForegroundColor DarkGray
+                    Set-HnsHostnameCommit -HostnameId $hostname.id -Confirm:$false
                     
-                    $processedCount++
+                    # Add delay between API calls to prevent overwhelming the server
+                    Start-Sleep -Milliseconds 300
                 }
                 catch {
-                    Write-ColorOutput "  - Failed to process hostname $($hostname.id): $_" -ForegroundColor Red
+                    Write-ColorOutput "Failed to commit hostname $($hostname.id): $_" -ForegroundColor Red
                 }
-                
-                # Small delay to prevent API overload
-                Start-Sleep -Milliseconds 100
             }
             
-            # Move to next batch
-            $offset += $BatchSize
+            # Now, release all committed hostnames (including the ones we just committed)
+            # We need to fetch the list again to get updated statuses
+            $hostnames = Get-HnsHostname -TemplateId $TemplateId -Limit 1000 -ErrorAction Stop
+            $committedHostnames = $hostnames | Where-Object { $_.status -eq "committed" }
             
-            # Give the API a break
-            Write-ColorOutput "Batch complete. Processed $processedCount hostnames so far..." -ForegroundColor Green
-            Start-Sleep -Seconds 1
+            foreach ($hostname in $committedHostnames) {
+                try {
+                    Write-ColorOutput "Releasing hostname $($hostname.name) (ID: $($hostname.id))..." -ForegroundColor DarkGray
+                    Set-HnsHostnameRelease -HostnameId $hostname.id -Confirm:$false
+                    
+                    # Add delay between API calls
+                    Start-Sleep -Milliseconds 300
+                }
+                catch {
+                    Write-ColorOutput "Failed to release hostname $($hostname.id): $_" -ForegroundColor Red
+                }
+            }
+            
+            # Add a pause to let any database transactions complete
+            Write-ColorOutput "Waiting for database to catch up..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 3
         }
-        catch {
-            Write-ColorOutput "Error processing batch: $_" -ForegroundColor Red
-            # Try next batch - might be a temporary issue
-            $offset += $BatchSize
-            Start-Sleep -Seconds 2
+        else {
+            Write-ColorOutput "No hostnames found for template ID $TemplateId" -ForegroundColor Green
         }
-    }
-    
-    Write-ColorOutput "Finished processing hostnames for template ID $TemplateId. Total processed: $processedCount" -ForegroundColor Green
-    Write-ColorOutput "Waiting for database to catch up before deleting template..." -ForegroundColor Yellow
-    Start-Sleep -Seconds 5
-    
-    # Now try to delete the template
-    try {
+        
+        # Now try to delete the template
         Write-ColorOutput "Attempting to delete template ID $TemplateId..." -ForegroundColor Cyan
         Remove-HnsTemplate -Id $TemplateId -Confirm:$false
         Write-ColorOutput "Template ID $TemplateId deleted successfully!" -ForegroundColor Green
         return $true
     }
     catch {
-        Write-ColorOutput "Failed to delete template ID $TemplateId: $_" -ForegroundColor Red
+        Write-ColorOutput "Failed to clean template ID $TemplateId: $_" -ForegroundColor Red
         return $false
     }
 }
