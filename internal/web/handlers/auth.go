@@ -37,7 +37,7 @@ func (h *AuthHandler) ShowLogin(c *gin.Context) {
 		c.Set("returnUrl", returnURL)
 	}
 
-	h.RenderTemplate(c, "login", gin.H{
+	c.HTML(http.StatusOK, "login.html", gin.H{
 		"Title": "Login",
 	})
 }

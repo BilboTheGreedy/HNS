@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -78,19 +77,12 @@ func (h *ErrorHandler) getCurrentYear() int {
 }
 
 // RecoveryMiddleware recovers from panics and renders a 500 page
+// RecoveryMiddleware recovers from panics and renders a 500 page
 func (h *ErrorHandler) RecoveryMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if r := recover(); r != nil {
-				var err error
-				switch e := r.(type) {
-				case error:
-					err = e
-				default:
-					err = fmt.Errorf("%v", e)
-				}
-
-				// Log the panic
+				// Log the panic directly without declaring an unused error variable
 				log.Error().
 					Interface("recovery", r).
 					Str("stack", string(debug.Stack())).

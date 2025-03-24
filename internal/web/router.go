@@ -24,24 +24,25 @@ func SetupRouter(
 	jwtManager *auth.JWTManager,
 	dnsChecker *dns.DNSChecker,
 ) {
-	// Set up session store
-	helpers.SetupSessionStore(router)
-
-	// Set up template renderer
+	// 1. Set up template renderer FIRST - before any routes are registered
 	setupTemplates(router)
 
-	// Serve static files
+	// 2. Set up session store
+	helpers.SetupSessionStore(router)
+
+	// 3. Serve static files
 	router.Static("/static", "./internal/web/static")
 
-	// Create middleware
+	// 4. Create middleware
 	authMiddleware := middleware.NewAuthMiddleware(userRepo)
 	router.Use(authMiddleware.LoadUser())
 
-	// Create handlers
+	// 5. Create handlers
 	authHandler := handlers.NewAuthHandler(userRepo)
 	dashboardHandler := handlers.NewDashboardHandler(hostnameRepo, templateRepo)
 	baseHandler := handlers.NewBaseHandler()
 
+	// 6. Register routes AFTER template setup
 	// Unprotected routes
 	router.GET("/login", authHandler.ShowLogin)
 	router.POST("/login", authHandler.Login)

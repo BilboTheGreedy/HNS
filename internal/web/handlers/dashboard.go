@@ -65,8 +65,8 @@ func (h *DashboardHandler) Show(c *gin.Context) {
 func (h *DashboardHandler) getStats(ctx context.Context) (*DashboardStats, error) {
 	stats := &DashboardStats{}
 
-	// Get template count
-	templates, total, err := h.templateRepo.List(ctx, 1, 0)
+	// Get template count - fix the unused variable by only getting the count
+	_, total, err := h.templateRepo.List(ctx, 1, 0)
 	if err != nil {
 		return nil, err
 	}

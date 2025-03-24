@@ -114,9 +114,22 @@ func main() {
 
 	// Create DNS checker
 	dnsChecker := dns.NewDNSChecker(cfg.DNS)
+	// Add this to your main function or a debug endpoint
+	templatePaths := []string{
+		"./internal/web/templates/layouts/base/base.html",
+		"./internal/web/templates/layouts/pages/login.html",
+		"./internal/web/templates/layouts/partials/navbar.html",
+	}
 
+	for _, path := range templatePaths {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			log.Error().Str("path", path).Msg("Template file doesn't exist")
+		} else {
+			log.Info().Str("path", path).Msg("Template file exists")
+		}
+	}
 	// Set up Gin with appropriate mode
-	if cfg.Server.Environment == "production" {
+	if os.Getenv("GIN_MODE") == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	} else {
 		gin.SetMode(gin.DebugMode)
@@ -127,9 +140,9 @@ func main() {
 	router.Use(gin.Recovery())
 
 	// Setup API routes under /api path
-	apiRouter := router.Group("/api")
+
 	api.SetupRouter(
-		apiRouter,
+		router, // Pass the entire engine
 		genService,
 		resService,
 		seqService,
