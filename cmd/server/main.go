@@ -18,6 +18,7 @@ import (
 	"github.com/bilbothegreedy/HNS/internal/repository"
 	"github.com/bilbothegreedy/HNS/internal/repository/postgres"
 	"github.com/bilbothegreedy/HNS/internal/service"
+	"github.com/bilbothegreedy/HNS/internal/web"
 	"github.com/bilbothegreedy/HNS/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
@@ -69,7 +70,7 @@ func ensureAdminUserExists(userRepo repository.UserRepository) {
 func main() {
 	// Initialize logger
 	utils.InitLogger(zerolog.InfoLevel)
-	log.Info().Msg("Starting server name generator application")
+	log.Info().Msg("Starting Hostname Naming System (HNS)")
 
 	// Load configuration
 	cfg, err := config.LoadConfig()
@@ -98,7 +99,10 @@ func main() {
 	hostRepo := postgres.NewHostnameRepository(db)
 	templateRepo := postgres.NewTemplateRepository(db)
 	userRepo := postgres.NewUserRepository(db)
+
+	// Ensure admin user exists
 	ensureAdminUserExists(userRepo)
+
 	// Create services
 	genService := service.NewGeneratorService(templateRepo)
 	resService := service.NewReservationService(hostRepo, templateRepo)
@@ -110,20 +114,38 @@ func main() {
 
 	// Create DNS checker
 	dnsChecker := dns.NewDNSChecker(cfg.DNS)
-	// Setup Gin router
-	gin.SetMode(gin.ReleaseMode) // Use ReleaseMode for production
+
+	// Set up Gin with appropriate mode
+	if cfg.Server.Environment == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
+		gin.SetMode(gin.DebugMode)
+	}
+
+	// Create router
 	router := gin.New()
 	router.Use(gin.Recovery())
 
-	// Setup API routes
+	// Setup API routes under /api path
+	apiRouter := router.Group("/api")
 	api.SetupRouter(
-		router,
+		apiRouter,
 		genService,
 		resService,
 		seqService,
 		userRepo,
 		jwtManager,
 		apiKeyManager,
+		dnsChecker,
+	)
+
+	// Setup Web routes for the UI
+	web.SetupRouter(
+		router,
+		userRepo,
+		hostRepo,
+		templateRepo,
+		jwtManager,
 		dnsChecker,
 	)
 
@@ -147,7 +169,7 @@ func main() {
 	log.Info().Msg("Shutting down server...")
 
 	// Create context with timeout for shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
 
 	// Shutdown the server

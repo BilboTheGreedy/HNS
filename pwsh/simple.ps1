@@ -325,7 +325,98 @@ function New-ApiKey {
     }
 }
 
-# Main menu
+function Remove-Template {
+    param([int]$Id)
+    
+    Write-Color "Deleting template with ID $Id..." "Cyan"
+    
+    try {
+        $response = Invoke-RestMethod -Uri "$HnsUrl/api/templates/$Id" -Method DELETE -Headers $script:Headers
+        Write-Color "Template deleted successfully!" "Green"
+        return $true
+    }
+    catch {
+        # Detailed error handling
+        try {
+            $errorDetails = $_.ErrorDetails.Message | ConvertFrom-Json
+            Write-Color "Failed to delete template: $($errorDetails.error)" "Red"
+            
+            # If the error suggests hostname dependencies
+            if ($errorDetails.error -like "*associated hostnames*") {
+                Write-Color "The template has associated hostnames. You must:" "Yellow"
+                Write-Color "1. Release all committed hostnames" "Gray"
+                Write-Color "2. Remove all reserved/released hostnames first" "Gray"
+                Write-Color "Use the following PowerShell functions to clean up:" "Gray"
+                Write-Color "  - Get-Hostnames -TemplateId $Id -Status committed" "Gray"
+                Write-Color "  - Get-Hostnames -TemplateId $Id -Status reserved" "Gray"
+            }
+        }
+        catch {
+            Write-Color "Failed to delete template: $_" "Red"
+        }
+        return $false
+    }
+}
+
+# NEW: Delete a hostname
+function Remove-Hostname {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$Id,
+        
+        [Parameter(Mandatory = $false)]
+        [switch]$Force
+    )
+    
+    Write-Color "Deleting hostname with ID $Id..." "Cyan"
+    
+    try {
+        if ($Force) {
+            # First, release the hostname if it's in a non-released state
+            $hostname = Get-HnsHostname -Id $Id
+            
+            if ($hostname.status -eq "committed") {
+                Write-Color "Releasing committed hostname first..." "Yellow"
+                Release-Hostname -Id $Id
+            }
+            elseif ($hostname.status -eq "reserved") {
+                Write-Color "Releasing and then committing reserved hostname..." "Yellow"
+                Commit-Hostname -Id $Id
+                Release-Hostname -Id $Id
+            }
+        }
+        
+        # Attempt to delete - note: actual deletion might not be supported by API
+        Write-Color "WARNING: Direct hostname deletion may not be supported by the API." "Yellow"
+        Write-Color "This operation might fail or be intentionally restricted." "Yellow"
+        
+        $response = Invoke-RestMethod -Uri "$HnsUrl/api/hostnames/$Id" -Method DELETE -Headers $script:Headers
+        Write-Color "Hostname deleted successfully!" "Green"
+        return $true
+    }
+    catch {
+        Write-Color "Failed to delete hostname: $_" "Red"
+        return $false
+    }
+}
+
+# NEW: Delete an API Key
+function Remove-ApiKey {
+    param([int]$Id)
+    
+    Write-Color "Deleting API key with ID $Id..." "Cyan"
+    
+    try {
+        $response = Invoke-RestMethod -Uri "$HnsUrl/api/apikeys/$Id" -Method DELETE -Headers $script:Headers
+        Write-Color "API key deleted successfully!" "Green"
+        return $true
+    }
+    catch {
+        Write-Color "Failed to delete API key: $_" "Red"
+        return $false
+    }
+}
+# Updated Menu Function
 function Show-Menu {
     Write-Color "`n===== HNS API Test Menu =====" "Magenta"
     Write-Color "1. Initialize Connection" "Cyan"
@@ -340,16 +431,20 @@ function Show-Menu {
     Write-Color "10. Release a Hostname" "Cyan"
     Write-Color "11. Check DNS" "Cyan"
     Write-Color "12. Create API Key" "Cyan"
+    # NEW: Deletion Options
+    Write-Color "13. Delete a Template" "Red"
+    Write-Color "14. Delete a Hostname" "Red"
+    Write-Color "15. Delete an API Key" "Red"
     Write-Color "0. Exit" "Red"
     Write-Color "`nEnter your choice: " "Yellow" -NoNewline
     
     $choice = Read-Host
     return $choice
 }
-
 # Script execution
 $templateId = 0
 $hostnameId = 0
+$apiKeyId = 0
 
 while ($true) {
     $choice = Show-Menu
@@ -442,6 +537,29 @@ while ($true) {
             if (-not $scope) { $scope = "read,reserve" }
             
             New-ApiKey -Name $name -Scope $scope
+        }
+        "13" { 
+            if ($templateId -eq 0) {
+                $templateId = Read-Host "Enter template ID to delete"
+            }
+            Remove-Template -Id $templateId
+        }
+        "14" { 
+            if ($hostnameId -eq 0) {
+                $hostnameId = Read-Host "Enter hostname ID to delete"
+            }
+            $forceDelete = Read-Host "Force delete (attempt to release first)? (y/n)"
+            if ($forceDelete -eq 'y') {
+                Remove-Hostname -Id $hostnameId -Force
+            } else {
+                Remove-Hostname -Id $hostnameId
+            }
+        }
+        "15" { 
+            if ($apiKeyId -eq 0) {
+                $apiKeyId = Read-Host "Enter API key ID to delete"
+            }
+            Remove-ApiKey -Id $apiKeyId
         }
         default { Write-Color "Invalid choice, try again" "Red" }
     }

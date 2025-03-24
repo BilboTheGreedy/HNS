@@ -1,0 +1,97 @@
+/* Custom styles for HNS */
+
+/* Sticky footer */
+html {
+    position: relative;
+    min-height: 100%;
+  }
+  
+  body {
+    margin-bottom: 60px; /* Margin bottom = footer height */
+  }
+  
+  .footer {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 60px; /* Set the fixed height of the footer */
+    line-height: 60px; /* Vertically center the text there */
+  }
+  
+  /* Dashboard cards */
+  .card-hover:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+  }
+  
+  /* Navigation active state */
+  .navbar-dark .navbar-nav .nav-link.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 0.25rem;
+  }
+  
+  /* Status badges */
+  .status-badge {
+    width: 80px;
+    text-align: center;
+  }
+  
+  /* Table improvements */
+  .table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+  }
+  
+  /* Card headers with icons */
+  .card-header i {
+    margin-right: 0.5rem;
+  }
+  
+  /* Form element focus styles */
+  .form-control:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  }
+  
+  /* Custom button styles */
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .btn-icon i {
+    margin-right: 0.5rem;
+  }
+  
+  /* Responsive table styles */
+  @media (max-width: 767.98px) {
+    .table-responsive-cards .table-header {
+      display: none;
+    }
+    
+    .table-responsive-cards tbody tr {
+      display: block;
+      margin-bottom: 1rem;
+      border: 1px solid #dee2e6;
+      border-radius: 0.25rem;
+    }
+    
+    .table-responsive-cards tbody td {
+      display: block;
+      text-align: right;
+      border: none;
+      position: relative;
+      padding-left: 50%;
+    }
+    
+    .table-responsive-cards tbody td:before {
+      content: attr(data-label);
+      position: absolute;
+      left: 0;
+      width: 45%;
+      padding-left: 15px;
+      font-weight: bold;
+      text-align: left;
+    }
+  }

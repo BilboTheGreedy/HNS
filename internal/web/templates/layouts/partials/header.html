@@ -1,0 +1,89 @@
+{{ define "navbar" }}
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container">
+        <!-- Brand/logo -->
+        <a class="navbar-brand" href="/dashboard">
+            <i class="fas fa-server me-2"></i>HNS
+        </a>
+        
+        <!-- Toggler for mobile -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        
+        <!-- Navigation items -->
+        <div class="collapse navbar-collapse" id="navbarMain">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link {{ if eq .ActivePage "dashboard" }}active{{ end }}" href="/dashboard">
+                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ if eq .ActivePage "hostnames" }}active{{ end }}" href="/hostnames">
+                        <i class="fas fa-tag"></i> Hostnames
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ if eq .ActivePage "templates" }}active{{ end }}" href="/templates">
+                        <i class="fas fa-sitemap"></i> Templates
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ if eq .ActivePage "dns" }}active{{ end }}" href="/dns">
+                        <i class="fas fa-network-wired"></i> DNS Tools
+                    </a>
+                </li>
+                
+                <!-- Admin menu - only visible to admins -->
+                {{ if .IsAdmin }}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle {{ if eq .ActivePage "admin" }}active{{ end }}" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-shield-alt"></i> Admin
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="adminDropdown">
+                        <li>
+                            <a class="dropdown-item" href="/admin/users">
+                                <i class="fas fa-users"></i> Manage Users
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="/admin/settings">
+                                <i class="fas fa-cogs"></i> System Settings
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                {{ end }}
+            </ul>
+            
+            <!-- User menu -->
+            <ul class="navbar-nav">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-user-circle"></i> {{ .Username }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li>
+                            <a class="dropdown-item" href="/profile">
+                                <i class="fas fa-id-card"></i> My Profile
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="/api-keys">
+                                <i class="fas fa-key"></i> API Keys
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="/logout">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+{{ end }}
