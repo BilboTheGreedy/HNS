@@ -2,161 +2,163 @@ package helpers
 
 import (
 	"crypto/rand"
-	"net/http"
+	"encoding/base64"
 
 	"github.com/bilbothegreedy/HNS/internal/models"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog/log"
 )
 
-// SessionKeys holds the key names used in the session
+// Session key constants
 const (
-	SessionKeyUserID    = "userID"
-	SessionKeyUsername  = "username"
-	SessionKeyIsAdmin   = "isAdmin"
-	SessionKeyLoggedIn  = "loggedIn"
-	SessionKeyToken     = "token"
-	SessionKeyAlertType = "alertType"
-	SessionKeyAlertMsg  = "alertMessage"
+	UserIDKey    = "userID"
+	UsernameKey  = "username"
+	IsAdminKey   = "isAdmin"
+	LoggedInKey  = "loggedIn"
+	AlertTypeKey = "alertType"
+	AlertMsgKey  = "alertMessage"
 )
 
-// SetupSessionStore configures session management for the application
+// Alert represents a flash message to show to the user
+type Alert struct {
+	Type    string // success, danger, warning, info
+	Message string
+}
+
+// SetupSessionStore initializes the session store for the application
 func SetupSessionStore(router *gin.Engine) {
-	// Use fixed keys of exactly 32 bytes (required for AES-256)
-	// In production, you should use environment variables or secure key management
-	authKey := []byte("12345678901234567890123456789012") // exactly 32 bytes
-	encKey := []byte("09876543210987654321098765432109")  // exactly 32 bytes
+	// Generate random key for session encryption
+	key := generateRandomKey(32) // 32 bytes for AES-256
 
-	// Create cookie store with secure keys
-	store := cookie.NewStore(authKey, encKey)
+	// Create cookie store
+	store := cookie.NewStore(key)
 
-	// Configure session options
+	// Configure session
 	store.Options(sessions.Options{
-		Path:     "/",
+		Path:     "/",   // Available to all paths
 		MaxAge:   86400, // 1 day
-		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteLaxMode,
+		HttpOnly: true,  // Not accessible via JavaScript
+		Secure:   false, // Set to true in production if using HTTPS
 	})
 
 	// Register the session middleware
 	router.Use(sessions.Sessions("hns_session", store))
 }
 
-// generateKey creates a random key of the specified length
-func generateKey(length int) []byte {
+// generateRandomKey generates a random key for session encryption
+func generateRandomKey(length int) []byte {
 	key := make([]byte, length)
 	_, err := rand.Read(key)
 	if err != nil {
-		// If random generation fails, use a fallback key (in dev only)
-		log.Error().Err(err).Msg("Failed to generate random key, using fallback")
-		// Warning: Use environment variables in production
-		if length == 32 {
-			return []byte("01234567890123456789012345678901")
-		}
-		return []byte("0123456789012345")
+		// If random generation fails, use a default key
+		// This is not secure for production; consider using env variables
+		return []byte("default-key-please-change-in-production")
 	}
 	return key
 }
 
 // SetUserSession stores user information in the session
-func SetUserSession(c *gin.Context, user *models.User, token string) error {
+func SetUserSession(c *gin.Context, user *models.User) {
 	session := sessions.Default(c)
 
 	// Clear any existing session data
 	session.Clear()
 
-	// Set session data
-	session.Set(SessionKeyUserID, user.ID)
-	session.Set(SessionKeyUsername, user.Username)
-	session.Set(SessionKeyIsAdmin, user.Role == models.RoleAdmin)
-	session.Set(SessionKeyLoggedIn, true)
+	// Store user data in session
+	session.Set(UserIDKey, user.ID)
+	session.Set(UsernameKey, user.Username)
+	session.Set(IsAdminKey, user.Role == models.RoleAdmin)
+	session.Set(LoggedInKey, true)
 
-	// Store JWT token if provided
-	if token != "" {
-		session.Set(SessionKeyToken, token)
-	}
-
-	// Save session immediately
-	err := session.Save()
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to save user session")
-		return err
-	}
-
-	return nil
+	// Save the session
+	session.Save()
 }
 
-// GetUserFromSession retrieves user information from the session
-func GetUserFromSession(c *gin.Context) *models.User {
-	session := sessions.Default(c)
-	userID := session.Get(SessionKeyUserID)
-
-	if userID == nil {
-		return nil
-	}
-
-	// Create a user object with session data
-	user := &models.User{
-		ID:       userID.(int64),
-		Username: session.Get(SessionKeyUsername).(string),
-	}
-
-	// Set role if available
-	isAdmin := session.Get(SessionKeyIsAdmin)
-	if isAdmin != nil && isAdmin.(bool) {
-		user.Role = models.RoleAdmin
-	} else {
-		user.Role = models.RoleUser
-	}
-
-	return user
-}
-
-// IsAuthenticated checks if the user is authenticated
-func IsAuthenticated(c *gin.Context) bool {
-	session := sessions.Default(c)
-	userID := session.Get(SessionKeyUserID)
-	return userID != nil
-}
-
-// IsAdmin checks if the user is an admin
-func IsAdmin(c *gin.Context) bool {
-	session := sessions.Default(c)
-	isAdmin := session.Get(SessionKeyIsAdmin)
-	return isAdmin != nil && isAdmin.(bool)
-}
-
-// ClearSession removes all session data
+// ClearSession removes all session data (logout)
 func ClearSession(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
 	session.Save()
 }
 
-// AddContextUserData adds user information to the Gin context
-func AddContextUserData(c *gin.Context) {
+// IsAuthenticated checks if the user is authenticated
+func IsAuthenticated(c *gin.Context) bool {
 	session := sessions.Default(c)
-	userID := session.Get(SessionKeyUserID)
-	username := session.Get(SessionKeyUsername)
-	isAdmin := session.Get(SessionKeyIsAdmin)
-	loggedIn := session.Get(SessionKeyLoggedIn)
+	return session.Get(LoggedInKey) == true
+}
 
+// GetCurrentUserID gets the current user's ID from the session
+func GetCurrentUserID(c *gin.Context) (int64, bool) {
+	session := sessions.Default(c)
+	userID := session.Get(UserIDKey)
+	if userID == nil {
+		return 0, false
+	}
+	return userID.(int64), true
+}
+
+// SetAlert sets a flash message in the session
+func SetAlert(c *gin.Context, alertType, message string) {
+	session := sessions.Default(c)
+	session.Set(AlertTypeKey, alertType)
+	session.Set(AlertMsgKey, message)
+	session.Save()
+}
+
+// GetAlert gets and clears the flash message from the session
+func GetAlert(c *gin.Context) *Alert {
+	session := sessions.Default(c)
+
+	alertType := session.Get(AlertTypeKey)
+	alertMsg := session.Get(AlertMsgKey)
+
+	if alertType != nil && alertMsg != nil {
+		// Clear the alert after retrieving it
+		session.Delete(AlertTypeKey)
+		session.Delete(AlertMsgKey)
+		session.Save()
+
+		return &Alert{
+			Type:    alertType.(string),
+			Message: alertMsg.(string),
+		}
+	}
+
+	return nil
+}
+
+// AddUserDataToContext adds user data from session to the Gin context
+func AddUserDataToContext(c *gin.Context) {
+	session := sessions.Default(c)
+
+	// Get user data from session
+	userID := session.Get(UserIDKey)
+	username := session.Get(UsernameKey)
+	isAdmin := session.Get(IsAdminKey)
+	loggedIn := session.Get(LoggedInKey)
+
+	// Add to context if available
 	if userID != nil {
-		c.Set(SessionKeyUserID, userID)
+		c.Set(UserIDKey, userID)
 	}
 
 	if username != nil {
-		c.Set(SessionKeyUsername, username)
+		c.Set(UsernameKey, username)
 	}
 
 	if isAdmin != nil {
-		c.Set(SessionKeyIsAdmin, isAdmin)
+		c.Set(IsAdminKey, isAdmin)
 	}
 
 	if loggedIn != nil {
-		c.Set(SessionKeyLoggedIn, loggedIn)
+		c.Set(LoggedInKey, loggedIn)
 	}
+}
+
+// GenerateRandomToken generates a random token for CSRF protection
+func GenerateRandomToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return base64.StdEncoding.EncodeToString(b)
 }

@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/bilbothegreedy/HNS/internal/dns"
 	"github.com/bilbothegreedy/HNS/internal/models"
@@ -505,9 +507,40 @@ func (h *APIHandler) DeleteTemplate(c *gin.Context) {
 		return
 	}
 
+	// Check if there are any hostnames associated with this template
+	hostnameCount, err := checkAssociatedHostnames(c.Request.Context(), h, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to check for associated hostnames",
+			"details": err.Error(),
+		})
+		log.Error().Err(err).Int64("templateID", id).Msg("Failed to check associated hostnames")
+		return
+	}
+
+	if hostnameCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":          "Cannot delete template with associated hostnames",
+			"message":        fmt.Sprintf("Template '%s' (ID: %d) has %d associated hostnames that must be deleted first. Release all committed hostnames, and remove all reserved or released hostnames before deleting the template.", template.Name, id, hostnameCount),
+			"hostname_count": hostnameCount,
+		})
+		return
+	}
+
 	// Delete the template
 	if err := h.generatorService.DeleteTemplate(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete template"})
+		// Check if the error is due to a foreign key constraint
+		if strings.Contains(err.Error(), "foreign key constraint") {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":   "Cannot delete template with dependencies",
+				"message": "This template has dependent records (hostnames or template groups) that must be deleted first.",
+				"details": err.Error(),
+			})
+			log.Error().Err(err).Int64("templateID", id).Msg("Failed to delete template due to dependencies")
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete template", "details": err.Error()})
 		log.Error().Err(err).Int64("templateID", id).Msg("Failed to delete template")
 		return
 	}
@@ -516,4 +549,20 @@ func (h *APIHandler) DeleteTemplate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": fmt.Sprintf("Template '%s' (ID: %d) deleted successfully", template.Name, id),
 	})
+}
+
+// checkAssociatedHostnames checks if there are any hostnames using the template
+func checkAssociatedHostnames(ctx context.Context, h *APIHandler, templateID int64) (int, error) {
+	// Use the reservation service to search for hostnames with the template ID
+	filters := map[string]interface{}{
+		"template_id": templateID,
+	}
+
+	// Limit to just 1 to make the query faster - we just need to check if any exist
+	_, total, err := h.reservationService.SearchHostnames(ctx, filters, 1, 0)
+	if err != nil {
+		return 0, fmt.Errorf("failed to search for hostnames: %w", err)
+	}
+
+	return total, nil
 }

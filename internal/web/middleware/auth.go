@@ -6,72 +6,97 @@ import (
 	"github.com/bilbothegreedy/HNS/internal/repository"
 	"github.com/bilbothegreedy/HNS/internal/web/helpers"
 	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog/log"
 )
 
-// AuthMiddleware contains auth middleware functions
+// AuthMiddleware handles authentication for web routes
 type AuthMiddleware struct {
 	userRepo repository.UserRepository
 }
 
-// NewAuthMiddleware creates a new AuthMiddleware instance
+// NewAuthMiddleware creates a new AuthMiddleware
 func NewAuthMiddleware(userRepo repository.UserRepository) *AuthMiddleware {
 	return &AuthMiddleware{
 		userRepo: userRepo,
 	}
 }
 
-// AuthRequired middleware checks if user is authenticated
-func (m *AuthMiddleware) AuthRequired() gin.HandlerFunc {
+// RequireAuth middleware checks if user is authenticated
+func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check if user is authenticated
-		loggedIn, exists := c.Get("loggedIn")
-		userID, userExists := c.Get("userID")
+		if !helpers.IsAuthenticated(c) {
+			// Remember the requested URL for redirection after login
+			c.Set("returnUrl", c.Request.URL.String())
 
-		log.Debug().
-			Interface("loggedIn", loggedIn).
-			Interface("exists", exists).
-			Interface("userID", userID).
-			Interface("userExists", userExists).
-			Str("path", c.Request.URL.Path).
-			Msg("Auth check - session data")
-
-		if !exists || !loggedIn.(bool) || !userExists {
-			log.Info().Str("path", c.Request.URL.Path).Msg("No authenticated user, redirecting to login")
+			// Redirect to login page
 			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
 			return
 		}
 
-		// Get user data for templates
-		user, err := m.userRepo.GetByID(c.Request.Context(), userID.(int64))
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to get user by ID")
+		// If authenticated, load user data
+		userID, exists := helpers.GetCurrentUserID(c)
+		if !exists {
+			// Invalid session, clear it
 			helpers.ClearSession(c)
 			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
 			return
 		}
 
-		// Make user data available in templates
+		// Get user from database to ensure it's still valid
+		user, err := m.userRepo.GetByID(c.Request.Context(), userID)
+		if err != nil || !user.IsActive {
+			helpers.ClearSession(c)
+
+			// Set alert message about account being inactive or not found
+			if user != nil && !user.IsActive {
+				helpers.SetAlert(c, "warning", "Your account has been deactivated. Please contact an administrator.")
+			}
+
+			c.Redirect(http.StatusFound, "/login")
+			c.Abort()
+			return
+		}
+
+		// Store user object in context
 		c.Set("user", user)
 
 		c.Next()
 	}
 }
 
-// AdminRequired middleware checks if the user is an admin
-func (m *AuthMiddleware) AdminRequired() gin.HandlerFunc {
+// RequireAdmin middleware checks if user is an admin
+func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// First check if authenticated
+		if !helpers.IsAuthenticated(c) {
+			c.Redirect(http.StatusFound, "/login")
+			c.Abort()
+			return
+		}
+
+		// Check if user is admin
 		isAdmin, exists := c.Get("isAdmin")
 		if !exists || !isAdmin.(bool) {
-			c.HTML(http.StatusForbidden, "pages/403.html", gin.H{
-				"Title": "Access Denied",
+			c.HTML(http.StatusForbidden, "403.html", gin.H{
+				"Title":       "Access Denied",
+				"Message":     "You do not have permission to access this page",
+				"CurrentYear": gin.H{},
 			})
 			c.Abort()
 			return
 		}
 
+		c.Next()
+	}
+}
+
+// LoadUser middleware loads user data into context for templates
+func (m *AuthMiddleware) LoadUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Add user data from session to context
+		helpers.AddUserDataToContext(c)
 		c.Next()
 	}
 }

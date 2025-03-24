@@ -261,7 +261,7 @@ func (s *GeneratorService) CreateTemplate(ctx context.Context, req *models.Templ
 	return s.templateRepo.GetByID(ctx, template.ID)
 }
 
-// DeleteTemplate deletes a template by ID
+// DeleteTemplate deletes a template by ID with better error handling
 func (s *GeneratorService) DeleteTemplate(ctx context.Context, id int64) error {
 	// Check if template exists
 	template, err := s.templateRepo.GetByID(ctx, id)
@@ -269,13 +269,13 @@ func (s *GeneratorService) DeleteTemplate(ctx context.Context, id int64) error {
 		return fmt.Errorf("failed to get template: %w", err)
 	}
 
-	// Check if template is in use by any hostnames
-	// This would require a method to check if any hostnames are using this template
-	// For now, we'll allow deletion even if hostnames are using the template
-	// In a production system, you might want to add this check
-
-	// Delete the template
+	// Delete the template - this will fail with a constraint error if there are dependencies
 	if err := s.templateRepo.Delete(ctx, id); err != nil {
+		// Parse and provide a better error message for foreign key constraint violation
+		if strings.Contains(err.Error(), "foreign key constraint") ||
+			strings.Contains(err.Error(), "violates foreign key constraint") {
+			return fmt.Errorf("cannot delete template with associated hostnames: all hostnames using this template must be deleted first before the template can be removed (error: %w)", err)
+		}
 		return fmt.Errorf("failed to delete template: %w", err)
 	}
 

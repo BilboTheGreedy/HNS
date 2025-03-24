@@ -1,82 +1,117 @@
 {{ define "content" }}
-<div class="container mt-4 mb-5">
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h1 class="display-6">Hostname Naming System</h1>
-                    <p class="lead">Manage, reserve, and track hostname assignments for your infrastructure</p>
-                </div>
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h2><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h2>
+                <p class="lead">Welcome to the Hostname Naming System</p>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Stats Cards -->
-    <div class="row text-white mb-4">
-        <div class="col-md-3">
-            <div class="card bg-primary stats-card text-center">
-                <div class="card-body">
-                    <h5>Total Hostnames</h5>
-                    <div class="stats-value">{{ .TotalHostnames }}</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-success stats-card text-center">
-                <div class="card-body">
-                    <h5>Available</h5>
-                    <div class="stats-value">{{ .AvailableHostnames }}</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-warning stats-card text-center">
-                <div class="card-body">
-                    <h5>Reserved</h5>
-                    <div class="stats-value">{{ .ReservedHostnames }}</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-info stats-card text-center">
-                <div class="card-body">
-                    <h5>Templates</h5>
-                    <div class="stats-value">{{ .TotalTemplates }}</div>
-                </div>
+<!-- Stats Cards -->
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="card bg-primary text-white h-100">
+            <div class="card-body text-center">
+                <h1><i class="fas fa-server"></i></h1>
+                <h3>{{ .Stats.TotalHostnames }}</h3>
+                <p class="mb-0">Total Hostnames</p>
             </div>
         </div>
     </div>
+    <div class="col-md-3 mb-4">
+        <div class="card bg-success text-white h-100">
+            <div class="card-body text-center">
+                <h1><i class="fas fa-check-circle"></i></h1>
+                <h3>{{ .Stats.AvailableHostnames }}</h3>
+                <p class="mb-0">Available</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card bg-warning text-dark h-100">
+            <div class="card-body text-center">
+                <h1><i class="fas fa-clock"></i></h1>
+                <h3>{{ .Stats.ReservedHostnames }}</h3>
+                <p class="mb-0">Reserved</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card bg-info text-white h-100">
+            <div class="card-body text-center">
+                <h1><i class="fas fa-sitemap"></i></h1>
+                <h3>{{ .Stats.TotalTemplates }}</h3>
+                <p class="mb-0">Templates</p>
+            </div>
+        </div>
+    </div>
+</div>
 
+<!-- Recent Activity and Quick Links -->
+<div class="row">
+    <!-- Recent Activity -->
+    <div class="col-md-8 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-history me-2"></i>Recent Activity</h5>
+            </div>
+            <div class="card-body">
+                {{ if .RecentHostnames }}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Hostname</th>
+                                <th>Status</th>
+                                <th>Reserved By</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{ range .RecentHostnames }}
+                            <tr>
+                                <td><a href="/hostnames/{{ .ID }}">{{ .Name }}</a></td>
+                                <td>
+                                    <span class="badge bg-{{ if eq .Status "reserved" }}warning{{ else if eq .Status "committed" }}success{{ else }}secondary{{ end }}">
+                                        {{ .Status }}
+                                    </span>
+                                </td>
+                                <td>{{ .ReservedBy }}</td>
+                                <td>{{ .ReservedAt }}</td>
+                            </tr>
+                            {{ end }}
+                        </tbody>
+                    </table>
+                </div>
+                {{ else }}
+                <p class="text-center py-3">No recent activity found.</p>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+    
     <!-- Quick Links -->
-    <div class="row">
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">Recent Hostnames</div>
-                <div class="card-body">
-                    {{ if .RecentHostnames }}
-                    <ul class="list-group">
-                        {{ range .RecentHostnames }}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <a href="/hostnames/{{ .ID }}">{{ .Name }}</a>
-                            <span class="badge bg-secondary">{{ .Status }}</span>
-                        </li>
-                        {{ end }}
-                    </ul>
-                    {{ else }}
-                    <p>No recent hostnames found.</p>
-                    {{ end }}
-                </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
             </div>
-        </div>
-
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">Quick Actions</div>
-                <div class="card-body d-grid gap-2">
-                    <a href="/hostnames/generate" class="btn btn-outline-primary">Generate Hostname</a>
-                    <a href="/hostnames/reserve" class="btn btn-outline-warning">Reserve Hostname</a>
-                    <a href="/dns/scan" class="btn btn-outline-info">Scan DNS</a>
-                </div>
+            <div class="card-body d-grid gap-2">
+                <a href="/hostnames/reserve" class="btn btn-primary">
+                    <i class="fas fa-plus-circle me-2"></i>Reserve Hostname
+                </a>
+                <a href="/templates" class="btn btn-secondary">
+                    <i class="fas fa-list me-2"></i>View Templates
+                </a>
+                <a href="/dns/check" class="btn btn-info text-white">
+                    <i class="fas fa-search me-2"></i>Check DNS
+                </a>
+                <a href="/api-keys" class="btn btn-success">
+                    <i class="fas fa-key me-2"></i>Manage API Keys
+                </a>
             </div>
         </div>
     </div>

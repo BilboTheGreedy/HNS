@@ -6,12 +6,16 @@ import (
 
 	"github.com/bilbothegreedy/HNS/internal/web/helpers"
 	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog/log"
 )
 
-// BaseHandler provides common functionality for all handlers
-type BaseHandler struct {
+// Alert represents a flash message to show to the user
+type Alert struct {
+	Type    string // success, danger, warning, info
+	Message string
 }
+
+// BaseHandler provides common functionality for all handlers
+type BaseHandler struct{}
 
 // NewBaseHandler creates a new BaseHandler
 func NewBaseHandler() *BaseHandler {
@@ -26,6 +30,9 @@ func (h *BaseHandler) RenderTemplate(c *gin.Context, templateName string, data g
 	}
 
 	// Add common data
+	data["CurrentYear"] = time.Now().Year()
+
+	// Check if user is logged in and add user data to context
 	loggedIn, exists := c.Get("loggedIn")
 	if exists && loggedIn.(bool) {
 		data["LoggedIn"] = true
@@ -41,37 +48,13 @@ func (h *BaseHandler) RenderTemplate(c *gin.Context, templateName string, data g
 		data["Alert"] = alert
 	}
 
-	// Add current year for footer
-	data["CurrentYear"] = time.Now().Year()
-
-	// Set active page for navigation highlighting
+	// Set active page for navigation highlighting if not already set
 	if _, ok := data["ActivePage"]; !ok {
 		data["ActivePage"] = templateName
 	}
 
-	// Log template rendering
-	log.Debug().
-		Str("template", templateName).
-		Interface("data_keys", getMapKeys(data)).
-		Msg("Rendering template")
-
-	// Special case for login and register pages which are full templates
-	if templateName == "login" || templateName == "register" {
-		c.HTML(http.StatusOK, "pages/"+templateName+".html", data)
-		return
-	}
-
-	// Otherwise render with base layout
-	c.HTML(http.StatusOK, "base.html", data)
-}
-
-// getMapKeys returns the keys of a map for logging
-func getMapKeys(m gin.H) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
+	// Render template
+	c.HTML(http.StatusOK, templateName+".html", data)
 }
 
 // RedirectWithAlert redirects with an alert message
@@ -82,41 +65,24 @@ func (h *BaseHandler) RedirectWithAlert(c *gin.Context, url, alertType, message 
 
 // NotFound renders a 404 page
 func (h *BaseHandler) NotFound(c *gin.Context) {
-	c.HTML(http.StatusNotFound, "pages/404.html", gin.H{
+	c.HTML(http.StatusNotFound, "404.html", gin.H{
 		"Title":       "Page Not Found",
+		"CurrentYear": time.Now().Year(),
+	})
+}
+
+// ServerError renders a 500 page
+func (h *BaseHandler) ServerError(c *gin.Context, err error) {
+	c.HTML(http.StatusInternalServerError, "500.html", gin.H{
+		"Title":       "Server Error",
 		"CurrentYear": time.Now().Year(),
 	})
 }
 
 // Forbidden renders a 403 page
 func (h *BaseHandler) Forbidden(c *gin.Context) {
-	c.HTML(http.StatusForbidden, "pages/403.html", gin.H{
+	c.HTML(http.StatusForbidden, "403.html", gin.H{
 		"Title":       "Access Denied",
 		"CurrentYear": time.Now().Year(),
 	})
-}
-
-// InternalError renders a 500 page
-func (h *BaseHandler) InternalError(c *gin.Context, err error) {
-	if err != nil {
-		log.Error().Err(err).Str("path", c.Request.URL.Path).Msg("Internal server error")
-	}
-
-	c.HTML(http.StatusInternalServerError, "pages/500.html", gin.H{
-		"Title":       "Internal Server Error",
-		"CurrentYear": time.Now().Year(),
-	})
-}
-
-// Home renders the home/dashboard page
-func (h *BaseHandler) Home(c *gin.Context) {
-	// If not logged in, redirect to login page
-	loggedIn, exists := c.Get("loggedIn")
-	if !exists || !loggedIn.(bool) {
-		c.Redirect(http.StatusFound, "/login")
-		return
-	}
-
-	// For logged-in users, redirect to dashboard
-	c.Redirect(http.StatusFound, "/dashboard")
 }

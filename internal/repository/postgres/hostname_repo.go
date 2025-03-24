@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -49,7 +50,6 @@ func (r *HostnameRepository) Create(ctx context.Context, hostname *models.Hostna
 	return nil
 }
 
-// GetByID retrieves a hostname by its ID
 func (r *HostnameRepository) GetByID(ctx context.Context, id int64) (*models.Hostname, error) {
 	query := `
 		SELECT id, name, template_id, status, sequence_num, reserved_by, reserved_at,
@@ -60,11 +60,16 @@ func (r *HostnameRepository) GetByID(ctx context.Context, id int64) (*models.Hos
 	`
 
 	hostname := &models.Hostname{}
+
+	// Temporary variables for handling NULL values
+	var committedBy, releasedBy sql.NullString
+	var committedAt, releasedAt sql.NullTime
+
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&hostname.ID, &hostname.Name, &hostname.TemplateID, &hostname.Status,
 		&hostname.SequenceNum, &hostname.ReservedBy, &hostname.ReservedAt,
-		&hostname.CommittedBy, &hostname.CommittedAt, &hostname.ReleasedBy,
-		&hostname.ReleasedAt, &hostname.DNSVerified, &hostname.CreatedAt, &hostname.UpdatedAt,
+		&committedBy, &committedAt, &releasedBy,
+		&releasedAt, &hostname.DNSVerified, &hostname.CreatedAt, &hostname.UpdatedAt,
 	)
 
 	if err != nil {
@@ -72,6 +77,20 @@ func (r *HostnameRepository) GetByID(ctx context.Context, id int64) (*models.Hos
 			return nil, fmt.Errorf("hostname not found: %d", id)
 		}
 		return nil, fmt.Errorf("failed to get hostname: %w", err)
+	}
+
+	// Handle NULL value conversion
+	if committedBy.Valid {
+		hostname.CommittedBy = committedBy.String
+	}
+	if committedAt.Valid {
+		hostname.CommittedAt = &committedAt.Time
+	}
+	if releasedBy.Valid {
+		hostname.ReleasedBy = releasedBy.String
+	}
+	if releasedAt.Valid {
+		hostname.ReleasedAt = &releasedAt.Time
 	}
 
 	return hostname, nil
@@ -323,14 +342,34 @@ func (r *HostnameRepository) List(ctx context.Context, limit, offset int, filter
 	var hostnames []*models.Hostname
 	for rows.Next() {
 		hostname := &models.Hostname{}
+
+		// Temporary variables for handling NULL values
+		var committedBy, releasedBy sql.NullString
+		var committedAt, releasedAt sql.NullTime
+
 		if err := rows.Scan(
 			&hostname.ID, &hostname.Name, &hostname.TemplateID, &hostname.Status,
 			&hostname.SequenceNum, &hostname.ReservedBy, &hostname.ReservedAt,
-			&hostname.CommittedBy, &hostname.CommittedAt, &hostname.ReleasedBy,
-			&hostname.ReleasedAt, &hostname.DNSVerified, &hostname.CreatedAt, &hostname.UpdatedAt,
+			&committedBy, &committedAt, &releasedBy,
+			&releasedAt, &hostname.DNSVerified, &hostname.CreatedAt, &hostname.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("failed to scan hostname row: %w", err)
 		}
+
+		// Handle NULL value conversion
+		if committedBy.Valid {
+			hostname.CommittedBy = committedBy.String
+		}
+		if committedAt.Valid {
+			hostname.CommittedAt = &committedAt.Time
+		}
+		if releasedBy.Valid {
+			hostname.ReleasedBy = releasedBy.String
+		}
+		if releasedAt.Valid {
+			hostname.ReleasedAt = &releasedAt.Time
+		}
+
 		hostnames = append(hostnames, hostname)
 	}
 

@@ -18,7 +18,6 @@ import (
 	"github.com/bilbothegreedy/HNS/internal/repository"
 	"github.com/bilbothegreedy/HNS/internal/repository/postgres"
 	"github.com/bilbothegreedy/HNS/internal/service"
-	"github.com/bilbothegreedy/HNS/internal/web"
 	"github.com/bilbothegreedy/HNS/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
@@ -126,19 +125,6 @@ func main() {
 		jwtManager,
 		apiKeyManager,
 		dnsChecker,
-	)
-
-	// Setup web routes (using our refactored web package)
-	web.SetupWebRouter(
-		router,
-		userRepo,
-		templateRepo,
-		hostRepo,
-		jwtManager,
-		genService,
-		resService,
-		dnsChecker,
-		seqService,
 	)
 
 	// Start server in a goroutine
