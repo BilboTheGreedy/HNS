@@ -12,7 +12,7 @@
 RootModule = 'HNS-Standalone.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.0'
+ModuleVersion = '2.0.0'
 
 # Supported PSEditions
 CompatiblePSEditions = @('Desktop', 'Core')
@@ -30,7 +30,7 @@ CompanyName = 'HNS Standalone'
 Copyright = '(c) HNS Development Team. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = 'A standalone PowerShell module for Hostname Naming Service (HNS) - Generate and manage standardized hostnames based on configurable templates without requiring a server infrastructure.'
+Description = 'Lightweight Epiroc VM Standard hostname generator. Checks DNS, ICMP, AD, ServiceNow for availability. No database required - returns only available hostnames.'
 
 # Minimum version of the PowerShell engine required by this module
 PowerShellVersion = '5.1'
@@ -69,47 +69,7 @@ PowerShellVersion = '5.1'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @(
-    # Template Management
-    'New-HNSTemplate',
-    'Get-HNSTemplate',
-    'Set-HNSTemplate',
-    'Remove-HNSTemplate',
-    'Test-HNSTemplate',
-    'Import-HNSTemplate',
-    'Export-HNSTemplate',
-    
-    # Hostname Management
-    'New-HNSHostname',
-    'Get-HNSHostname',
-    'Set-HNSHostname',
-    'Remove-HNSHostname',
-    'Reserve-HNSHostname',
-    'Commit-HNSHostname',
-    'Release-HNSHostname',
-    
-    # DNS Operations
-    'Test-HNSDns',
-    'Start-HNSDnsScan',
-    
-    # Sequence Management
-    'Get-HNSNextSequence',
-    'Reset-HNSSequence',
-    
-    # Configuration
-    'Get-HNSConfiguration',
-    'Set-HNSConfiguration',
-    'Initialize-HNSEnvironment',
-    'Reset-HNSEnvironment',
-    
-    # Import/Export
-    'Backup-HNSData',
-    'Restore-HNSData',
-    
-    # Reporting
-    'Get-HNSStatistics',
-    'Export-HNSReport'
-)
+FunctionsToExport = @('Get-AvailableHostname')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()
@@ -118,13 +78,7 @@ CmdletsToExport = @()
 VariablesToExport = '*'
 
 # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-AliasesToExport = @(
-    'ghns',      # Get-HNSHostname
-    'nhns',      # New-HNSHostname
-    'rhns',      # Reserve-HNSHostname
-    'ghnt',      # Get-HNSTemplate
-    'nhnt'       # New-HNSTemplate
-)
+AliasesToExport = @('Get-Hostname', 'New-Hostname')
 
 # DSC resources to export from this module
 # DscResourcesToExport = @()
