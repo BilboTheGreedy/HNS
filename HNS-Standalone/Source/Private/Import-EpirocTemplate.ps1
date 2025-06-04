@@ -32,7 +32,7 @@ function Import-EpirocTemplate {
                 Position = 3
                 IsRequired = $true
                 ValidationType = 'List'
-                ValidationValue = 'M,A,G,H,O,E'
+                ValidationValue = 'E,M,A,G'
             },
             @{
                 Name = 'region'
@@ -40,7 +40,7 @@ function Import-EpirocTemplate {
                 Position = 4
                 IsRequired = $true
                 ValidationType = 'List'
-                ValidationValue = 'WEEU,NOEU,SWNA,NCUS,SCUS,EAUS,WEUS,EAAS,SEAS,SOAS,JAPA,AUSE,BRSO,SAFE,GENG,MXCE,INCA,AUCE,AUCH,AUNW,WCUS,SWUS,CEUS,NEUS,NEEU,CEEU,UKSO,AZWE,AZNO,AZEA,AZSE,AZSC,AZNE,AZWC,AZUS,AZEU,AZAP,AZZA,AZAU,AZIN,AZCH,AZJP,AZBR,AZCA,AZUK,AZFR,AZGE,AZIT,AZKO,AZPO,AZSG,AZSF,AZUA,AZGA,AZVA,AZNJ,AZBE,AZBA,AZML,GOOG,USVG,USOH,USTX,USCA,USNJ,USNY,USIL,USFL,USWA,USMA,USPA,USMI,USGA,USNC,USVA,USMD,USCT,USAZ,USNV,USCO,USOR,USUT,USID,USMT,USWY,USNM,USND,USSD,USNE,USIA,USMN,USWI,USMO,USAR,USLA,USMS,USAL,USKY,USTN,USIN,USSC,USWV,USME,USVT,USNH,USRI,USDE,ALOH,OCQC,OCBC,OCON,OCMB,OCAB,OCSK,OCNB,OCNS,OCNL,OCPE,OCYK,OCNT,OCNU,HV01,HV02,HV03,HV04,HV05,ON00,ON01,ON02,ON03,ON04,ON05,ON06,ON07,ON08,ON09,ON10,ON11,ON12,ON13,ON14,ON15,ON16,ON17,ON18,ON19,ON20'
+                ValidationValue = 'OCAU,ASCN,ASIN,ASSG,EUSE,AFZA,NAUS,ACL1,ACL2,AUEA,SEAU,INCE,SHA1,BJB1,EAAS,JPEA,JPWE,KRCE,KRSO,INSO,SEAS,INWE,FRCE,DEWC,ISCE,ITNO,NOEU,NWEA,PLCE,QACE,SANO,SAWE,SWCE,SZNO,UANO,UKSO,UKWE,WEEU,BRSO,CCAN,ECAN,CEUS,CLCE,EUS1,EUS2,NCUS,SCUS,WCUS,WUS1,WUS2,WUS3'
             },
             @{
                 Name = 'environment'
@@ -48,7 +48,7 @@ function Import-EpirocTemplate {
                 Position = 5
                 IsRequired = $true
                 ValidationType = 'List'
-                ValidationValue = 'P,Q,D,T,S,N,U,A,B,C,E,I'
+                ValidationValue = 'P,T,D'
             },
             @{
                 Name = 'function'
@@ -56,7 +56,7 @@ function Import-EpirocTemplate {
                 Position = 6
                 IsRequired = $true
                 ValidationType = 'List'
-                ValidationValue = 'AP,AS,BA,BE,BI,CA,CI,CM,CS,CT,DB,DC,DH,DI,DS,DV,EX,FS,FT,FW,GW,HV,IS,JS,JH,KM,LB,LI,MB,MD,MG,MQ,MS,MT,MW,NA,NS,PB,PC,PI,PK,PR,PS,PX,QA,RB,RD,RP,RH,RS,SC,SM,SQ,SR,ST,TE,TS,VC,VS,VD,VH,VM,VP,WA,WB,WF,WS,XX'
+                ValidationValue = 'AS,BU,DB,DC,FS,IS,MG,PO,WS,PV,CC,UC,OT'
             },
             @{
                 Name = 'sequence'
